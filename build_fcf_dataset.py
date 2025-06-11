@@ -1,101 +1,108 @@
 #!/usr/bin/env python3
 """
-Create fcf_quarterly_merged.csv with:
-  • Free-Cash-Flow per share (quarterly)
-  • Matching daily price at the report date
-  • One row per report   (2000-2024, US market)
-
-Usage:
-  export SIMFIN_API_KEY='YOUR_KEY'  # or leave unset for the public key
-  python build_fcf_dataset.py
+Produce fcf_quarterly_merged.csv with:
+Ticker, ReportDate, Price, FCF, FCF_per_share, FCFps_growth
 """
 
 import os, time, pandas as pd, numpy as np, simfin as sf
 from pathlib import Path
 from dotenv import load_dotenv
-import time
 from requests.exceptions import HTTPError
 
-# Load environment variables from .env file
+# ---------- CONFIG ----------
+MARKET, START_YEAR = 'US', 2000
+DATA_DIR, OUT_CSV  = Path('simfin_data'), Path('fcf_quarterly_merged.csv')
+MAX_RETRY, RETRY_DELAY = 5, 8
+CAPEX_CANDS = [
+    'Change in Fixed Assets & Intangibles',
+    'Purchase of PPE & Intangibles, net',
+    'Capital Expenditures (Fixed Assets)',
+    'Capital Expenditures'
+]
+# -----------------------------
+
 load_dotenv()
-
-# -------------------- CONFIG --------------------
-MARKET       = 'US'
-START_YEAR   = 2000
-DATA_DIR     = Path('simfin_data')
-OUT_CSV      = Path('fcf_quarterly_merged.csv')
-MAX_RETRIES  = 5
-RETRY_DELAY  = 8          # seconds (exponential back-off)
-# ------------------------------------------------
-
 sf.set_api_key(os.getenv('SIMFIN_API_KEY', 'free'))
 sf.set_data_dir(str(DATA_DIR))
 
-def retry(func, *args, **kwargs):
-    "Retry helper with exponential back-off."
-    for attempt in range(MAX_RETRIES):
-        try:
-            return func(*args, **kwargs)
+def retry(func, *a, **kw):
+    for i in range(MAX_RETRY):
+        try: return func(*a, **kw)
         except HTTPError as e:
-            if attempt == MAX_RETRIES - 1 or not (500 <= e.response.status_code < 600):
+            if i == MAX_RETRY-1 or not 500 <= e.response.status_code < 600:
                 raise
-            wait = RETRY_DELAY * 2**attempt
-            print(f'  ↻  Server error {e.response.status_code}. Retry in {wait}s …')
+            wait = RETRY_DELAY * 2**i
+            print(f'  ↻  {e.response.status_code}: retry in {wait}s …')
             time.sleep(wait)
 
 # ---------- 1) fundamentals ----------
-print('↳ Downloading quarterly cash-flow statements …')
-try:
-    cf = retry(sf.load_cashflow, variant='quarterly', market=MARKET, refresh_days=365)
-except Exception as e:
-    # ----- Offline fallback: Kaggle bulk CSV -----
-    kaggle_zip = Path('simfin_cashflow_quarterly.zip')   # put the file next to this script
-    if kaggle_zip.exists():
-        print('  ⚠️  API failed. Loading local Kaggle mirror …')
-        cf = pd.read_csv(kaggle_zip, compression='zip', parse_dates=['Report Date'])
-    else:
-        raise RuntimeError('Could not obtain cash-flow data.') from e
+print('Cash-flow & income …')
+cf  = retry(sf.load_cashflow, variant='quarterly', market=MARKET, refresh_days=365)
+inc = retry(sf.load_income,   variant='quarterly', market=MARKET, refresh_days=365)
+cf, inc = cf.reset_index(), inc.reset_index()
 
-print('↳ Downloading quarterly income statements (for share count) …')
-inc = retry(sf.load_income, variant='quarterly', market=MARKET, refresh_days=365)
+capex_col = next((c for c in CAPEX_CANDS if c in cf.columns), None)
+if not capex_col:
+    raise KeyError(f'CapEx column not found. Tried {CAPEX_CANDS}')
 
-# Merge CF and INCOME to get FCF per share
-print('↳ Computing Free-Cash-Flow per share …')
-cols_cf   = ['Ticker', 'Report Date',
-             'Net Cash from Operating Activities',   # cash in
-             'Purchase of Property, Plant & Equipment']  # CapEx (usually negative)
-cf  = cf.reset_index()[cols_cf]
-cf.rename(columns={
-    'Net Cash from Operating Activities': 'OCF',
-    'Purchase of Property, Plant & Equipment': 'CAPEX'
-}, inplace=True)
-cf['FCF'] = cf['OCF'] + cf['CAPEX']            # CAPEX is negative cash-out
-inc = inc.reset_index()[['Ticker', 'Report Date', 'Shares (Basic)']]
+cf = cf[['Ticker', 'Report Date', 'Net Cash from Operating Activities', capex_col]]
+cf.rename(columns={'Net Cash from Operating Activities': 'OCF', capex_col: 'CAPEX'},
+          inplace=True)
+cf['FCF'] = cf['OCF'] + cf['CAPEX']          # CAPEX ≤ 0
+inc = inc[['Ticker', 'Report Date', 'Shares (Basic)']]
 
-fund = pd.merge(cf, inc, on=['Ticker', 'Report Date'], how='inner', validate='one_to_one')
+fund = (cf.merge(inc, on=['Ticker', 'Report Date'])
+          .loc[lambda d: d['Report Date'].dt.year >= START_YEAR])
 fund['FCF_per_share'] = fund['FCF'] / fund['Shares (Basic)']
-fund = fund[fund['Report Date'].dt.year >= START_YEAR]
+
+fund.sort_values(['Ticker', 'Report Date'], inplace=True, ignore_index=True)
+fund['FCFps_lag4']   = fund.groupby('Ticker')['FCF_per_share'].shift(4)
+fund['FCFps_growth'] = (fund['FCF_per_share'] - fund['FCFps_lag4']) / fund['FCFps_lag4']
 
 # ---------- 2) prices ----------
-print('↳ Downloading daily prices …')
+# ---------- 2) prices ----------
+print('Daily prices …')
 px = retry(sf.load_shareprices, variant='daily', market=MARKET, refresh_days=365)
-px = px.reset_index()[['Ticker', 'Date', 'Adj. Close']]
+px = (px.reset_index()[['Ticker','Date','Adj. Close']]
+          .assign(Date=lambda d: pd.to_datetime(d['Date']))
+          .sort_values(['Ticker','Date']))
 
-# ---------- 3) align price with report ----------
-print('↳ Aligning price to report date …')
-px = px.set_index(['Ticker', 'Date']).sort_index()
-fund = fund.sort_values(['Ticker', 'Report Date'])
-merged = pd.merge_asof(
-    fund,
-    px.reset_index().sort_values('Date'),
-    by='Ticker',
-    left_on='Report Date',
-    right_on='Date',
-    direction='forward',
-    tolerance=pd.Timedelta('7D')
-).rename(columns={'Adj. Close': 'Price'}).dropna(subset=['Price'])
+# helper: map each (Ticker, ReportDate) to the first trade ≤ 7 days ahead
+print('Aligning prices …')
+# 1) restrict price table to a 7-day look-ahead window for speed
+px['Date_plus7'] = px['Date'] - pd.Timedelta(days=7)
 
-print(f'✓ Final dataset: {merged.shape[0]:,} rows')
-merged.to_csv(OUT_CSV, index=False)
-print(f'✓ Saved → {OUT_CSV}')
-print(merged.head())
+# 2) build a key for fast join
+fund_keyed = (fund[['Ticker','Report Date']]
+              .rename(columns={'Report Date':'RptDate'}))
+px_keyed   = (px[['Ticker','Date','Adj. Close']]
+              .rename(columns={'Date':'TradeDate','Adj. Close':'Price'}))
+
+# 3) inner merge where TradeDate ≥ RptDate
+temp = (fund_keyed.merge(px_keyed, on='Ticker')
+                   .loc[lambda df: (df['TradeDate'] >= df['RptDate']) & (df['TradeDate'] <= (df['RptDate'] + pd.Timedelta("7D")))]
+                   .sort_values(['Ticker','RptDate','TradeDate'])
+                   .groupby(['Ticker','RptDate'], as_index=False)
+                   .first())      # earliest valid price
+
+merged = (fund.merge(temp, left_on=['Ticker','Report Date'],
+                             right_on=['Ticker','RptDate'],
+                             how='left')
+                .drop(columns='RptDate'))
+
+# (optional) forward 12-month price – identical trick but shift RptDate by +365 d
+
+
+print('Merging & pruning …')
+# merged = attach_prices(fund)
+merged.dropna(subset=['Price', 'FCFps_growth'], inplace=True)
+
+# Uncomment if you want these for later analysis
+# merged['Pct_change_12m'] = (merged['Price_fwd'] - merged['Price']) / merged['Price']
+
+final = merged[['Ticker', 'Report Date', 'Price',
+                'FCF', 'FCF_per_share', 'FCFps_growth']]
+
+print(f'Rows: {len(final):,}')
+final.to_csv(OUT_CSV, index=False)
+print(f'Saved → {OUT_CSV}\n', final.head())
