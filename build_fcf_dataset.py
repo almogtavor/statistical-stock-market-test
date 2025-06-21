@@ -57,7 +57,7 @@ fund['FCF_per_share'] = fund['FCF'] / fund['Shares (Basic)']
 
 fund.sort_values(['Ticker', 'Report Date'], inplace=True, ignore_index=True)
 fund['FCFps_lag4'] = fund.groupby('Ticker')['FCF_per_share'].shift(4)
-fund['FCFps_growth'] = (fund['FCF_per_share'] - fund['FCFps_lag4']) / fund['FCFps_lag4']
+fund['YoY_FCFps_growth'] = (fund['FCF_per_share'] - fund['FCFps_lag4']) / fund['FCFps_lag4']
 
 # ---------- 2) prices ----------
 print('Daily prices …')
@@ -85,13 +85,16 @@ merged = (fund.merge(temp, left_on=['Ticker', 'Report Date'],
                 .drop(columns='RptDate'))
 
 print('Merging & computing Market Cap …')
-merged.dropna(subset=['Price', 'FCFps_growth'], inplace=True)
+merged.dropna(subset=['Price', 'YoY_FCFps_growth'], inplace=True)
 
 # ✅ Add Market Cap = Price × Shares
 merged['Market_Cap'] = merged['Price'] * merged['Shares (Basic)']
+merged.sort_values(['Ticker', 'Report Date'], inplace=True, ignore_index=True)
+merged['Price_lag4']   = merged.groupby('Ticker')['Price'].shift(4)
+merged['YoY_Price_growth'] = (merged['Price'] - merged['Price_lag4']) / merged['Price_lag4']
 
-final = merged[['Ticker', 'Report Date', 'Price', 'Market_Cap',
-                'FCF', 'FCF_per_share', 'FCFps_growth']]
+final = merged[['Ticker', 'Report Date', 'Price', 'YoY_Price_growth', 'Market_Cap',
+                'FCF', 'FCF_per_share', 'YoY_FCFps_growth']]
 
 print(f'Rows: {len(final):,}')
 final.to_csv(OUT_CSV, index=False)

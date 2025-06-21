@@ -193,3 +193,5 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 .idea/
+.latex_out/
+simfin_data/
