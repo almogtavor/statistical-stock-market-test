@@ -1,12 +1,33 @@
 # Cash Time Machine
 
-1. Install Python dependencies:
+### Environment Setup
 
-```pip install -r requirements.txt```
+#### Windows
 
-2. Dataset:
-   - Data is in `fcf_dataset.csv`.
+1. Create a virtual environment:
+   ```
+   python -m venv .venv
+   ```
+2. Activate the virtual environment:
+   ```
+   .venv\Scripts\activate
+   ```
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
-3. For the paper:
-   - You need LaTeX to compile `written/stats_paper.tex`.
+#### macOS/Linux
 
+1. Create a virtual environment:
+   ```
+   python3 -m venv .venv
+   ```
+2. Activate the virtual environment:
+   ```
+   source .venv/bin/activate
+   ```
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
