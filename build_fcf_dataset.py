@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from requests.exceptions import HTTPError
 
 MARKET, START_YEAR = 'US', 2000
-DATA_DIR, OUT_CSV  = Path('simfin_data'), Path('fcf_quarterly_merged.csv')
+DATA_DIR, OUT_CSV  = Path('simfin_data'), Path('fcf_dataset.csv')
 MAX_RETRY, RETRY_DELAY = 5, 8
 CAPEX_CANDS = [
     'Change in Fixed Assets & Intangibles',
