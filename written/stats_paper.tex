@@ -82,8 +82,9 @@ We matched each quarterly report to the first available stock-closing price with
   \end{tabular}
 \end{table*}
 
-\section{Using the Style Files}
+\section{Linear Regression Analysis}
 
+We estimated the linear relation between next-year price growth ($Y$) and year-over-year free cash flow per share growth ($X$) using OLS, trimming firms with $|X|>100\%$ to exclude extreme cases and scaling $X$ to percentage points for interpretability. After these adjustments, the slope $\hat\beta_1$ quantifies the average change in return per 1 percentage point increase in FCF growth. A hexbin density plot and fitted line visually confirm the near-zero slope in noisy data. This ensures outlier control and clear economic interpretation.
 
 \section{Document Body}
 
