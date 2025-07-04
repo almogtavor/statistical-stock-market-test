@@ -1,97 +1,87 @@
 #!/usr/bin/env python3
 """
-build_fcf_dataset_yfinance.py
------------------------------
+build_fcf_dataset_2025_data.py
 
-Create fcf_price_table.csv with columns:
-Ticker, Report Date, Price, YoY_Price_growth, Market_Cap,
-FCF, FCF_per_share, YoY_FCFps_growth
+Incrementally extend fcf_dataset.csv with fresh Yahoo Finance data
+and keep a resumable pointer in yahoo_fill_progress.txt.
 
-Compared with the SimFin version, this script:
-  • Uses only free Yahoo Finance data via yfinance (no API key, no rate-limit headaches).
-  • Automatically pulls a broad US-large-cap universe (S&P500 + NASDAQ100 + Dow30).
-  • Goes back as far as Yahoo has quarterly cash-flow data (often well before 2015).
+This version fixes missing YoY and YoY2 growth numbers by
+recomputing them for the entire ticker each time new rows are added.
+
+Author: You   •   Updated: 2025-07-04
 """
-
 from __future__ import annotations
-from datetime import datetime, timedelta
-import time
+
+import os
 import sys
+import time
 import warnings
-import numpy as np
-import pandas as pd
-import requests
-import yfinance as yf
-from bs4 import BeautifulSoup
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
 ###############################################################################
-# ----------------------------- CONFIG -------------------------------------- #
+# -------------------------------- CONFIG ----------------------------------- #
 ###############################################################################
-OUTFILE              = "fcf_price_table.csv"
-PRICE_LOOKAHEAD_DAYS = 7          # how many trading days after report-date to accept
-SLEEP_BETWEEN_TICKER = 0.3        # polite pause to avoid throttling
-MAX_YFINANCE_RETRY   = 3
+MASTER_CSV           = "fcf_dataset.csv"
+PROGRESS_FILE        = "yahoo_fill_progress.txt"
+PRICE_LOOKAHEAD_DAYS = 7
+SLEEP_BETWEEN_TICKER = 0.3
+MAX_YFIN_RETRY       = 3
 
 pd.options.mode.chained_assignment = None
 warnings.simplefilter("ignore", category=FutureWarning)
 
 ###############################################################################
-# ---------------------  1.  Get a big ticker list  -------------------------- #
+# ----------------------------- I/O HELPERS --------------------------------- #
 ###############################################################################
-def _scrape_table(url: str) -> List[str]:
-    """Scrape the first HTML table from `url` and extract the first column that looks like tickers."""
-    tables = pd.read_html(url)
-    if not tables:
-        return []
-    df = tables[0]
-    for col in ["Symbol", "Ticker"]:
-        if col in df.columns:
-            return list(df[col].astype(str).str.upper())
-    # fallback: first column
-    return list(df.iloc[:, 0].astype(str).str.upper())
+def safe_write_csv(df: pd.DataFrame, path: str) -> None:
+    tmp = f"{path}.tmp"
+    df.to_csv(tmp, index=False, float_format="%.6f")
+    os.replace(tmp, path)
 
-def get_universe() -> List[str]:
-    """Fetch union of S&P500, NASDAQ-100, and Dow 30 symbols."""
-    print("Fetching ticker lists from Wikipedia ...")
-    sp500  = _scrape_table("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
-    nasdaq = _scrape_table("https://en.wikipedia.org/wiki/NASDAQ-100")
-    dow30  = _scrape_table("https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average")
-    tickers = sorted(set(sp500) | set(nasdaq) | set(dow30))
-    print(f"✅ Tickers found: S&P500={len(sp500)}, NASDAQ100={len(nasdaq)}, Dow30={len(dow30)}. Union={len(tickers)}")
-    return tickers
+def read_master() -> pd.DataFrame:
+    if not os.path.exists(MASTER_CSV):
+        raise FileNotFoundError(f"{MASTER_CSV} not found – create it first.")
+    return pd.read_csv(MASTER_CSV, parse_dates=["Report Date"])
 
+def save_progress(ticker: str) -> None:
+    with open(PROGRESS_FILE, "w", encoding="utf-8") as fh:
+        fh.write(ticker + "\n")
+
+def load_progress() -> str | None:
+    if not os.path.exists(PROGRESS_FILE):
+        return None
+    with open(PROGRESS_FILE, "r", encoding="utf-8") as fh:
+        last = fh.readline().strip()
+        return last or None
 
 ###############################################################################
-# -------- 2.  Robust helpers to pull Yahoo data with retries  --------------- #
+# -------------------- YAHOO FINANCE WRAPPER (RETRY) ------------------------ #
 ###############################################################################
 def yfin_retry(method, *args, **kwargs):
-    for i in range(1, MAX_YFINANCE_RETRY + 1):
+    for i in range(1, MAX_YFIN_RETRY + 1):
         try:
-            out = method(*args, **kwargs)
-            return out
-        except Exception as e:
-            if i == MAX_YFINANCE_RETRY:
+            return method(*args, **kwargs)
+        except Exception as ex:
+            if i == MAX_YFIN_RETRY:
                 raise
             wait = i * 2
-            print(f"    retry {i}/{MAX_YFINANCE_RETRY} after error: {e}  (sleep {wait}s)")
+            print(f"    retry {i}/{MAX_YFIN_RETRY} after: {ex} (sleep {wait}s)")
             time.sleep(wait)
 
 def get_quarterly_cashflow(tkr: str) -> Optional[pd.DataFrame]:
-    """
-    Return DF with index=report date, columns=['FCF', 'Shares'].
-    Tries 'Free Cash Flow'; if missing, computes OCF + CapEx.
-    """
     yft = yf.Ticker(tkr)
-
-    # ✅ Do NOT call yfin_retry here — this is a property, not a method
     cf = yft.quarterly_cashflow.T
     if cf.empty:
         return None
 
     if "Free Cash Flow" in cf.columns:
         cf["FCF"] = cf["Free Cash Flow"]
-    elif {"Operating Cash Flow", "Capital Expenditures"}.issubset(cf.columns):
+    elif {"Operating Cash Flow", "Capital Expenditures"} <= set(cf.columns):
         cf["FCF"] = cf["Operating Cash Flow"] + cf["Capital Expenditures"]
     else:
         return None
@@ -106,98 +96,123 @@ def get_quarterly_cashflow(tkr: str) -> Optional[pd.DataFrame]:
     return cf
 
 def nearest_price(yft: yf.Ticker, rpt_dates: pd.Index) -> pd.Series:
-    """
-    For each report date, return the first close price on or after that date
-    within PRICE_LOOKAHEAD_DAYS trading days.
-    """
     start = (rpt_dates.min() - timedelta(days=1)).strftime("%Y-%m-%d")
-    end   = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
-    hist = yfin_retry(yft.history, start=start, end=end, interval="1d")
-
+    end   = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    hist  = yfin_retry(yft.history, start=start, end=end, interval="1d")
     if isinstance(hist, tuple):
         hist = hist[0]
-
     if hist.empty:
         return pd.Series(index=rpt_dates, dtype="float64")
 
-    hist = hist[["Close"]]
     hist.index = pd.to_datetime(hist.index).tz_localize(None)
-
     close_for = []
     for d in rpt_dates:
         mask = (hist.index >= d) & (hist.index <= d + timedelta(days=PRICE_LOOKAHEAD_DAYS))
-        sub = hist.loc[mask]
+        sub  = hist.loc[mask]
         close_for.append(sub["Close"].iloc[0] if not sub.empty else np.nan)
     return pd.Series(close_for, index=rpt_dates)
 
-
 ###############################################################################
-# ---------------------- 3.  Per-ticker builder  ----------------------------- #
+# ---------------------- COMPUTE A SINGLE TICKER FRAME ---------------------- #
 ###############################################################################
 def build_one_ticker(tkr: str) -> Optional[pd.DataFrame]:
-    """
-    Return DataFrame with required 8 columns for `tkr`, or None on failure/insufficient data.
-    """
     cf = get_quarterly_cashflow(tkr)
     if cf is None or cf.empty:
         print(f"⚠️  {tkr:5}: no usable cash-flow data")
         return None
 
-    yft = yf.Ticker(tkr)
-    prices = nearest_price(yft, cf.index)
-
-    df = cf.copy()
-    df["Price"]       = prices
+    yft     = yf.Ticker(tkr)
+    prices  = nearest_price(yft, cf.index)
+    df      = cf.copy()
+    df["Price"] = prices
     df.dropna(subset=["Price"], inplace=True)
-
     if df.empty:
         print(f"⚠️  {tkr:5}: no matching prices")
         return None
 
     df["FCF_per_share"] = df["FCF"] / df["Shares"]
     df["Market_Cap"]    = df["Price"] * df["Shares"]
-
     df.sort_index(inplace=True)
-    df["YoY_Price_growth"]  = df["Price"].pct_change(4)
-    df["YoY_FCFps_growth"]  = df["FCF_per_share"].pct_change(4)
 
     df.reset_index(inplace=True)
     df.insert(0, "Ticker", tkr)
 
-    out = df[["Ticker", "Report Date", "Price", "YoY_Price_growth",
-              "Market_Cap", "FCF", "FCF_per_share", "YoY_FCFps_growth"]]
-    return out
+    cols = ["Ticker", "Report Date", "Price",
+            "Market_Cap", "FCF", "FCF_per_share"]
+    return df[cols]
 
 ###############################################################################
-# ---------------------------- 4.  Main run  --------------------------------- #
+# ------------- RECOMPUTE GROWTH COLUMNS FOR A SINGLE TICKER --------------- #
 ###############################################################################
-def main(tickers: List[str]):
-    frames = []
+def recompute_growth_for_ticker(df: pd.DataFrame) -> pd.DataFrame:
+    """df – rows of *one* ticker only, sorted by Report Date."""
+    df = df.sort_values("Report Date").copy()
+    df["YoY_Price_growth"]  = df["Price"].pct_change(4)
+    df["YoY2_Price_growth"] = df["Price"].pct_change(8)
+    df["YoY_FCFps_growth"]  = df["FCF_per_share"].pct_change(4)
+    df["YoY2_FCFps_growth"] = df["FCF_per_share"].pct_change(8)
+    return df
+
+###############################################################################
+# -------------------------------- MAIN ------------------------------------- #
+###############################################################################
+def main() -> None:
+    master = read_master()
+    tickers = sorted(master["Ticker"].unique())
+
+    last_done = load_progress()
+    if last_done:
+        print(f"⏭️  Resuming after '{last_done}'")
+        try:
+            tickers = tickers[tickers.index(last_done) + 1:]
+        except ValueError:
+            pass
+
+    if not tickers:
+        print("Nothing to do – every ticker already processed.")
+        return
+    print(f"Tickers left: {len(tickers)}")
+
     for i, tkr in enumerate(tickers, 1):
         print(f"[{i}/{len(tickers)}] {tkr}")
         try:
-            df = build_one_ticker(tkr)
-            if df is not None and not df.empty:
-                frames.append(df)
+            new_df = build_one_ticker(tkr)
+            if new_df is None:
+                save_progress(tkr)
+                continue
+
+            # Existing rows for this ticker
+            current = master[master["Ticker"] == tkr]
+            last_date = current["Report Date"].max() if not current.empty else None
+
+            # Keep only truly new quarters
+            mask = (new_df["Report Date"] > last_date) if pd.notna(last_date) else slice(None)
+            delta = new_df.loc[mask]
+
+            if delta.empty:
+                print("   already up-to-date")
+            else:
+                master = pd.concat([master, delta], ignore_index=True)
+
+            # Recompute growth metrics for this ticker (even if delta empty)
+            idx = master["Ticker"] == tkr
+            recomputed = recompute_growth_for_ticker(master.loc[idx])
+            master.loc[idx, recomputed.columns] = recomputed
+
+            # Sort and persist
+            master.sort_values(["Ticker", "Report Date"], inplace=True)
+            safe_write_csv(master, MASTER_CSV)
+            print(f"   data rows: {len(recomputed)} (ticker total)")
+
+            save_progress(tkr)
         except KeyboardInterrupt:
-            print("Interrupted by user; exiting.")
+            print("Interrupted by user – progress saved.")
             sys.exit(0)
-        except Exception as e:
-            print(f"⚠️  {tkr:5}: {e}")
+        except Exception as ex:
+            print(f"⚠️  {tkr:5}: {ex}")
         time.sleep(SLEEP_BETWEEN_TICKER)
 
-    if not frames:
-        print("No data retrieved - aborting.")
-        return
+    print("\n✅ All done!")
 
-    panel = pd.concat(frames, ignore_index=True)
-    panel.to_csv(OUTFILE, index=False, float_format="%.6f")
-    print(f"\n✅ Done. {len(panel):,} rows written → {OUTFILE}")
-
-###############################################################################
-# --------------------------------------------------------------------------- #
-###############################################################################
 if __name__ == "__main__":
-    universe = get_universe()
-    print(f"Ticker universe size: {len(universe)}")
-    main(universe)
+    main()
