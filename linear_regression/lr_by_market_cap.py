@@ -9,7 +9,11 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 
-CSV = "fcf_dataset.csv"
+MID_CAP = "Mid Cap"
+SMALL_CAP = "Super Small Cap"
+LARGE_CAP = "Super Large Cap"
+
+CSV = "../fcf_dataset.csv"
 df  = pd.read_csv(CSV)
 
 # ─── 1) Load & basic clean ───────────────────────────────────────────────
@@ -27,9 +31,9 @@ df   = df.loc[mask].copy()
 df["YoY_FCFps_growth"] *= 100
 
 # ─── 4) Define market-cap buckets ──────────────────────────────────────
-q10, q90 = df["Market_Cap"].quantile([0.1,0.9])
-df["CapBucket"] = np.where(df["Market_Cap"] < q10, "Small Cap",
-                   np.where(df["Market_Cap"] > q90, "Large Cap", "Mid Cap"))
+q10, q90 = df["Market_Cap"].quantile([0.01,0.99])
+df["CapBucket"] = np.where(df["Market_Cap"] < q10, SMALL_CAP,
+                           np.where(df["Market_Cap"] > q90, LARGE_CAP, MID_CAP))
 
 # ─── 5) OLS helper ──────────────────────────────────────────────────────
 def ols_params(x, y):
@@ -53,7 +57,7 @@ y = df["YoY_Price_growth"]
 plt.scatter(x, y, s=10, alpha=0.2, color="gray", label="Data")
 
 # colors for the lines
-colors = {"All":"black","Small Cap":"tab:blue","Mid Cap":"tab:green","Large Cap":"tab:red"}
+colors = {"All":"black", SMALL_CAP: "tab:blue", MID_CAP: "tab:green", LARGE_CAP: "tab:red"}
 
 x_line = np.linspace(x.min(), x.max(), 200)
 for name,(b0,b1) in fits.items():

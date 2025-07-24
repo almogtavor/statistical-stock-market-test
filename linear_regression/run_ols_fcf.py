@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from scipy import stats   # only for the p-value of the t-stat
 
-CSV = "fcf_dataset.csv"   # adjust path if needed
+CSV = "../fcf_dataset.csv"   # adjust path if needed
 
 # 1  load and clean ----------------------------------------------------------
 df = pd.read_csv(CSV)
