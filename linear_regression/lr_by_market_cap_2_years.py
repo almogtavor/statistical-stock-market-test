@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 
 
 EXTREME_COMPANIES_PERCENTS = 10 # setting to 10% means we'll measure the top 10% companies, and lowest 10%
-P_HIGH = 95
-P_LOW = 5
+P_LOWEST_CAP_CLIPPING_HIGH = 97
+P_LOWEST_CAP_CLIPPING_LOW = 3
 
 CSV = "../fcf_dataset.csv"
 
@@ -35,7 +35,7 @@ largest_market_cap_stocks = df["Market_Cap"].quantile(EXTREME_COMPANIES_PERCENTS
 smallest_market_cap_stocks = df["Market_Cap"].quantile(1 - (EXTREME_COMPANIES_PERCENTS / 100))
 
 tiers = {
-    "All Stocks": df.index,
+    "All Samples": df.index,
     "Mega-caps": df[df["Market_Cap"] >= smallest_market_cap_stocks].index,
     "Micro-caps": df[df["Market_Cap"] <= largest_market_cap_stocks].index,
     "Mid-caps": df[(df["Market_Cap"] > largest_market_cap_stocks) & (df["Market_Cap"] < smallest_market_cap_stocks)].index,
@@ -83,25 +83,37 @@ def clip_and_ols(x, y, p_low=0.9, p_high=99.1):
 results = {}
 for name, idx in tiers.items():
     sub = df.loc[idx]
+    x_vals = sub["FCF2y_pct"].values
+    y_vals = sub["Price2y_pct"].values
     if name == "Micro-caps":
         r = clip_and_ols(sub["FCF2y_pct"].values,
                          sub["Price2y_pct"].values,
-                         p_low=P_LOW, p_high=P_HIGH)
+                         p_low=P_LOWEST_CAP_CLIPPING_LOW, p_high=P_LOWEST_CAP_CLIPPING_HIGH)
     else:
         r = clip_and_ols(sub["FCF2y_pct"].values,
                          sub["Price2y_pct"].values)
     if r:
+        total = len(x_vals)
+        n_after_clipping = r["n"]
+        clipped = total - n_after_clipping
+        clipped_pct = clipped / total * 100
         results[name] = r
-        print(f"\n=== {name} === n={r['n']}, β₁={r['b1']:.6f}, p_value={r['p_value']:.3g}")
+        # Each sample is 2 years of fcf change of a stock and the change in its price 2 years after
+        # same stock can appear multiple times
+        print(f"\n=== {name} === Total samples: {total}, Retained after clipping: {n_after_clipping}, "
+              f"Clipped: {clipped} ({clipped_pct:.1f}%),"
+              f" β₁={r['b1']:.6f}, p_value={r['p_value']:.3g}")
 
 # Plot
 fig, ax = plt.subplots(figsize=(12, 8))
-colors = {"All Stocks": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
 
 # main cloud + fits
 for name, r in results.items():
-    if name == "All Stocks":
-        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.2, color=colors[name], label=name)
+    if name != "All Samples" and name != "Mid-caps":
+        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color=colors[name], label=f"{name} data")
+    elif name == "Mid-caps":
+        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color="black", label=f"{name} data")
     fit_x = np.linspace(*r["xlim"], 200)
     fit_y = r["b0"] + r["b1"] * fit_x
     ax.plot(fit_x, fit_y, color=colors[name], lw=2, label=f"{name} fit")
