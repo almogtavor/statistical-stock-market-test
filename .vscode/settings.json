@@ -1,4 +1,17 @@
 {
-    "latex-workshop.latex.outDir": "%WORKSPACE_FOLDER%/.latex_out",
-    "latex-workshop.latex.autoBuild.run": "onSave"
+  "latex-workshop.latex.tools": [
+    {
+      "name": "pdflatex",
+      "command": "pdflatex",
+      "args": ["-interaction=nonstopmode", "-file-line-error", "%DOC%"]
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "pdflatex",
+      "tools": ["pdflatex"]
+    }
+  ],
+  "latex-workshop.latex.outDir": "%WORKSPACE_FOLDER%/.latex_out",
+  "latex-workshop.latex.autoBuild.run": "onSave"
 }
