@@ -11,41 +11,30 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
+import argparse
 
 
 EXTREME_COMPANIES_PERCENTS = 10 # setting to 10% means we'll measure the top 10% companies, and lowest 10%
-P_LOWEST_CAP_CLIPPING_HIGH = 96
-P_LOWEST_CAP_CLIPPING_LOW = 4
+P_LOWEST_CAP_CLIPPING_HIGH = 95
+P_LOWEST_CAP_CLIPPING_LOW = 5
 
 CSV = "../fcf_dataset.csv"
 HORIZONS = {
-    "6M": ("Yo6M_FCFps_growth", "Yo6M_Price_growth"),
-    "1Y": ("YoY_FCFps_growth", "YoY_Price_growth"),
-    "2Y": ("YoY2_FCFps_growth", "YoY2_Price_growth"),
-    "3Y": ("YoY3_FCFps_growth", "YoY3_Price_growth"),
+    "6M": ("6M_FCFps_growth", "6M_Price_growth"),
+    "1Y": ("1Y_FCFps_growth", "1Y_Price_growth"),
+    "2Y": ("2Y_FCFps_growth", "2Y_Price_growth"),
+    "3Y": ("3Y_FCFps_growth", "3Y_Price_growth"),
 }
 # Load data
-df = pd.read_csv(CSV, parse_dates=["Report Date"])
-# we need the 2-year growth columns plus Market_Cap
-df = df[["Ticker", "Market_Cap", "2Y_FCFps_growth", "2Y_Price_growth"]].dropna()
+df_full = pd.read_csv(CSV, parse_dates=["Report Date"])
 
-# convert to % points
-df["FCF2y_pct"] = df["2Y_FCFps_growth"] * 100
-df["Price2y_pct"] = df["2Y_Price_growth"] * 100
-
-# -----------------------------------------------------------------------------
-# define cap‐tiers
-# -----------------------------------------------------------------------------
-largest_market_cap_stocks = df["Market_Cap"].quantile(EXTREME_COMPANIES_PERCENTS / 100)
-smallest_market_cap_stocks = df["Market_Cap"].quantile(1 - (EXTREME_COMPANIES_PERCENTS / 100))
-
-tiers = {
-    "All Samples": df.index,
-    "Mega-caps": df[df["Market_Cap"] >= smallest_market_cap_stocks].index,
-    "Micro-caps": df[df["Market_Cap"] <= largest_market_cap_stocks].index,
-    "Mid-caps": df[(df["Market_Cap"] > largest_market_cap_stocks) & (df["Market_Cap"] < smallest_market_cap_stocks)].index,
-}
-
+# ---------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument("--single-panel", action="store_true",
+                    help="Overlay all horizons' All Samples results on one panel")
+args = parser.parse_args()
 
 # -----------------------------------------------------------------------------
 # helper to clip & regress & report
@@ -84,49 +73,107 @@ def clip_and_ols(x, y, p_low=0.9, p_high=99.1):
     }
 
 
-# run for all tiers, but override percentiles for micro-caps
-results = {}
-for name, idx in tiers.items():
-    sub = df.loc[idx]
-    x_vals = sub["FCF2y_pct"].values
-    y_vals = sub["Price2y_pct"].values
-    if name == "Micro-caps":
-        r = clip_and_ols(sub["FCF2y_pct"].values,
-                         sub["Price2y_pct"].values,
-                         p_low=P_LOWEST_CAP_CLIPPING_LOW, p_high=P_LOWEST_CAP_CLIPPING_HIGH)
-    else:
-        r = clip_and_ols(sub["FCF2y_pct"].values,
-                         sub["Price2y_pct"].values)
-    if r:
-        total = len(x_vals)
-        n_after_clipping = r["n"]
-        clipped = total - n_after_clipping
-        clipped_pct = clipped / total * 100
-        results[name] = r
-        # Each sample is 2 years of fcf change of a stock and the change in its price 2 years after
-        # same stock can appear multiple times
-        print(f"\n=== {name} === Total samples: {total}, Retained after clipping: {n_after_clipping}, "
-              f"Clipped: {clipped} ({clipped_pct:.1f}%),"
-              f" β₁={r['b1']:.6f}, p_value={r['p_value']:.3g}")
+# store all-samples results for possible overlay
+all_samples_results = {}
+all_horizon_results = {}
 
-# Plot
-fig, ax = plt.subplots(figsize=(12, 8))
-colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+# run separately for each horizon
+for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
+    # we need the growth columns plus Market_Cap
+    df = df_full[["Ticker", "Market_Cap", fcfps_col, price_col]].dropna()
 
-# main cloud + fits
-for name, r in results.items():
-    if name != "All Samples" and name != "Mid-caps":
-        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color=colors[name], label=f"{name} data")
-    elif name == "Mid-caps":
-        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color="black", label=f"{name} data")
-    fit_x = np.linspace(*r["xlim"], 200)
-    fit_y = r["b0"] + r["b1"] * fit_x
-    ax.plot(fit_x, fit_y, color=colors[name], lw=2, label=f"{name} fit")
+    # convert to % points
+    fcf_pct_col = f"{horizon_label}_FCF_pct"
+    price_pct_col = f"{horizon_label}_Price_pct"
+    df[fcf_pct_col] = df[fcfps_col] * 100
+    df[price_pct_col] = df[price_col] * 100
 
-ax.set_title("2Y Price Change vs FCF Growth by Market Cap Tier")
-ax.set_xlabel("2-Year FCFps Growth (%)")
-ax.set_ylabel("2-Year Forward Price Change (%)")
-ax.legend()
-ax.grid(alpha=0.3)
-plt.tight_layout()
-plt.show()
+    # -----------------------------------------------------------------------------
+    # define cap‐tiers
+    # -----------------------------------------------------------------------------
+    largest_market_cap_stocks = df["Market_Cap"].quantile(EXTREME_COMPANIES_PERCENTS / 100)
+    smallest_market_cap_stocks = df["Market_Cap"].quantile(1 - (EXTREME_COMPANIES_PERCENTS / 100))
+
+    tiers = {
+        "All Samples": df.index,
+        "Mega-caps": df[df["Market_Cap"] >= smallest_market_cap_stocks].index,
+        "Micro-caps": df[df["Market_Cap"] <= largest_market_cap_stocks].index,
+        "Mid-caps": df[(df["Market_Cap"] > largest_market_cap_stocks) & (df["Market_Cap"] < smallest_market_cap_stocks)].index,
+    }
+
+    # run for all tiers, but override percentiles for micro-caps
+    results = {}
+    for name, idx in tiers.items():
+        sub = df.loc[idx]
+        x_vals = sub[fcf_pct_col].values
+        y_vals = sub[price_pct_col].values
+        if name == "Micro-caps":
+            r = clip_and_ols(sub[fcf_pct_col].values,
+                             sub[price_pct_col].values,
+                             p_low=P_LOWEST_CAP_CLIPPING_LOW, p_high=P_LOWEST_CAP_CLIPPING_HIGH)
+        else:
+            r = clip_and_ols(sub[fcf_pct_col].values,
+                             sub[price_pct_col].values)
+        if r:
+            total = len(x_vals)
+            n_after_clipping = r["n"]
+            clipped = total - n_after_clipping
+            clipped_pct = clipped / total * 100
+            results[name] = r
+            # Each sample is horizon FCF change of a stock and the change in its price same horizon after
+            # same stock can appear multiple times
+            print(f"\n=== {horizon_label} {name} === Total samples: {total}, Retained after clipping: {n_after_clipping}, "
+                  f"Clipped: {clipped} ({clipped_pct:.1f}%),"
+                  f" β₁={r['b1']:.6f}, p_value={r['p_value']:.3g}")
+
+    # stash all-samples if needed later for overlay
+    if "All Samples" in results:
+        all_samples_results[horizon_label] = results["All Samples"]
+
+    # Plot per-horizon (same as before)
+    fig, ax = plt.subplots(figsize=(12, 8))
+    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+
+    # main cloud + fits
+    for name, r in results.items():
+        if name != "All Samples" and name != "Mid-caps":
+            ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color=colors[name], label=f"{name} data")
+        elif name == "Mid-caps":
+            ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color="black", label=f"{name} data")
+        fit_x = np.linspace(*r["xlim"], 200)
+        fit_y = r["b0"] + r["b1"] * fit_x
+        ax.plot(fit_x, fit_y, color=colors[name], lw=2, label=f"{name} fit")
+
+    ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier")
+    ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
+    ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    all_horizon_results[horizon_label] = results
+
+# optional overlay of all horizons for "All Samples"
+# combined panel: 4 horizons in 2x2, still showing cap tiers
+if args.single_panel and all_horizon_results:
+    fig, axs = plt.subplots(2, 2, figsize=(16, 12), constrained_layout=True)
+    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+    horizon_order = ["6M", "1Y", "2Y", "3Y"]
+    for i, horizon_label in enumerate(horizon_order):
+        row, col = divmod(i, 2)
+        ax = axs[row, col]
+        results = all_horizon_results.get(horizon_label, {})
+        for name, r in results.items():
+            if name != "All Samples" and name != "Mid-caps":
+                ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color=colors[name], label=f"{name} data")
+            elif name == "Mid-caps":
+                ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, color="black", label=f"{name} data")
+            fit_x = np.linspace(*r["xlim"], 200)
+            fit_y = r["b0"] + r["b1"] * fit_x
+            ax.plot(fit_x, fit_y, color=colors.get(name, "black"), lw=2, label=f"{name} fit")
+        ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier")
+        ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
+        ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize="small")
+    plt.show()
