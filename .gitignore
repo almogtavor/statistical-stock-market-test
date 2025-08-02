@@ -195,3 +195,4 @@ cython_debug/
 .idea/
 .latex_out/
 simfin_data/
+yahoo_fill_progress.txt
