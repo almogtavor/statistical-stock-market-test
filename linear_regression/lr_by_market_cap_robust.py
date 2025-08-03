@@ -25,6 +25,13 @@ EXTREME_COMPANIES_PERCENTS = 10 # setting to 10% means we'll measure the top 10%
 P_LOWEST_CAP_CLIPPING_HIGH = 95
 P_LOWEST_CAP_CLIPPING_LOW = 5
 
+# Index ticker lists
+NASDAQ100_TICKERS = ['ADBE', 'AMD', 'ABNB', 'GOOGL', 'GOOG', 'AMZN', 'AEP', 'AMGN', 'ADI', 'AAPL', 'AMAT', 'APP', 'ARM', 'ASML', 'AZN', 'TEAM', 'ADSK', 'ADP', 'AXON', 'BKR', 'BIIB', 'BKNG', 'AVGO', 'CDNS', 'CDW', 'CHTR', 'CTAS', 'CSCO', 'CCEP', 'CTSH', 'CMCSA', 'CEG', 'CPRT', 'CSGP', 'COST', 'CRWD', 'CSX', 'DDOG', 'DXCM', 'FANG', 'DASH', 'EA', 'EXC', 'FAST', 'FTNT', 'GEHC', 'GILD', 'GFS', 'HON', 'IDXX', 'INTC', 'INTU', 'ISRG', 'KDP', 'KLAC', 'KHC', 'LRCX', 'LIN', 'LULU', 'MAR', 'MRVL', 'MELI', 'META', 'MCHP', 'MU', 'MSFT', 'MSTR', 'MDLZ', 'MNST', 'NFLX', 'NVDA', 'NXPI', 'ORLY', 'ODFL', 'ON', 'PCAR', 'PLTR', 'PANW', 'PAYX', 'PYPL', 'PDD', 'PEP', 'QCOM', 'REGN', 'ROP', 'ROST', 'SHOP', 'SBUX', 'SNPS', 'TMUS', 'TTWO', 'TSLA', 'TXN', 'TRI', 'TTD', 'VRSK', 'VRTX', 'WBD', 'WDAY', 'XEL', 'ZS']
+
+DOW30_TICKERS = ['MMM', 'AXP', 'AMGN', 'AMZN', 'AAPL', 'BA', 'CAT', 'CVX', 'CSCO', 'KO', 'DIS', 'GS', 'HD', 'HON', 'IBM', 'JNJ', 'JPM', 'MCD', 'MRK', 'MSFT', 'NKE', 'NVDA', 'PG', 'CRM', 'SHW', 'TRV', 'UNH', 'VZ', 'V', 'WMT']
+
+SP500_TICKERS = ['MMM', 'AOS', 'ABT', 'ABBV', 'ACN', 'ADBE', 'AMD', 'AES', 'AFL', 'A', 'APD', 'ABNB', 'AKAM', 'ALB', 'ARE', 'ALGN', 'ALLE', 'LNT', 'ALL', 'GOOGL', 'GOOG', 'MO', 'AMZN', 'AMCR', 'AEE', 'AEP', 'AXP', 'AIG', 'AMT', 'AWK', 'AMP', 'AME', 'AMGN', 'APH', 'ADI', 'AON', 'APA', 'APO', 'AAPL', 'AMAT', 'APTV', 'ACGL', 'ADM', 'ANET', 'AJG', 'AIZ', 'T', 'ATO', 'ADSK', 'ADP', 'AZO', 'AVB', 'AVY', 'AXON', 'BKR', 'BALL', 'BAC', 'BAX', 'BDX', 'BRK.B', 'BBY', 'TECH', 'BIIB', 'BLK', 'BX', 'XYZ', 'BK', 'BA', 'BKNG', 'BSX', 'BMY', 'AVGO', 'BR', 'BRO', 'BF.B', 'BLDR', 'BG', 'BXP', 'CHRW', 'CDNS', 'CZR', 'CPT', 'CPB', 'COF', 'CAH', 'KMX', 'CCL', 'CARR', 'CAT', 'CBOE', 'CBRE', 'CDW', 'COR', 'CNC', 'CNP', 'CF', 'CRL', 'SCHW', 'CHTR', 'CVX', 'CMG', 'CB', 'CHD', 'CI', 'CINF', 'CTAS', 'CSCO', 'C', 'CFG', 'CLX', 'CME', 'CMS', 'KO', 'CTSH', 'COIN', 'CL', 'CMCSA', 'CAG', 'COP', 'ED', 'STZ', 'CEG', 'COO', 'CPRT', 'GLW', 'CPAY', 'CTVA', 'CSGP', 'COST', 'CTRA', 'CRWD', 'CCI', 'CSX', 'CMI', 'CVS', 'DHR', 'DRI', 'DDOG', 'DVA', 'DAY', 'DECK', 'DE', 'DELL', 'DAL', 'DVN', 'DXCM', 'FANG', 'DLR', 'DG', 'DLTR', 'D', 'DPZ', 'DASH', 'DOV', 'DOW', 'DHI', 'DTE', 'DUK', 'DD', 'EMN', 'ETN', 'EBAY', 'ECL', 'EIX', 'EW', 'EA', 'ELV', 'EMR', 'ENPH', 'ETR', 'EOG', 'EPAM', 'EQT', 'EFX', 'EQIX', 'EQR', 'ERIE', 'ESS', 'EL', 'EG', 'EVRG', 'ES', 'EXC', 'EXE', 'EXPE', 'EXPD', 'EXR', 'XOM', 'FFIV', 'FDS', 'FICO', 'FAST', 'FRT', 'FDX', 'FIS', 'FITB', 'FSLR', 'FE', 'FI', 'F', 'FTNT', 'FTV', 'FOXA', 'FOX', 'BEN', 'FCX', 'GRMN', 'IT', 'GE', 'GEHC', 'GEV', 'GEN', 'GNRC', 'GD', 'GIS', 'GM', 'GPC', 'GILD', 'GPN', 'GL', 'GDDY', 'GS', 'HAL', 'HIG', 'HAS', 'HCA', 'DOC', 'HSIC', 'HSY', 'HPE', 'HLT', 'HOLX', 'HD', 'HON', 'HRL', 'HST', 'HWM', 'HPQ', 'HUBB', 'HUM', 'HBAN', 'HII', 'IBM', 'IEX', 'IDXX', 'ITW', 'INCY', 'IR', 'PODD', 'INTC', 'ICE', 'IFF', 'IP', 'IPG', 'INTU', 'ISRG', 'IVZ', 'INVH', 'IQV', 'IRM', 'JBHT', 'JBL', 'JKHY', 'J', 'JNJ', 'JCI', 'JPM', 'K', 'KVUE', 'KDP', 'KEY', 'KEYS', 'KMB', 'KIM', 'KMI', 'KKR', 'KLAC', 'KHC', 'KR', 'LHX', 'LH', 'LRCX', 'LW', 'LVS', 'LDOS', 'LEN', 'LII', 'LLY', 'LIN', 'LYV', 'LKQ', 'LMT', 'L', 'LOW', 'LULU', 'LYB', 'MTB', 'MPC', 'MKTX', 'MAR', 'MMC', 'MLM', 'MAS', 'MA', 'MTCH', 'MKC', 'MCD', 'MCK', 'MDT', 'MRK', 'META', 'MET', 'MTD', 'MGM', 'MCHP', 'MU', 'MSFT', 'MAA', 'MRNA', 'MHK', 'MOH', 'TAP', 'MDLZ', 'MPWR', 'MNST', 'MCO', 'MS', 'MOS', 'MSI', 'MSCI', 'NDAQ', 'NTAP', 'NFLX', 'NEM', 'NWSA', 'NWS', 'NEE', 'NKE', 'NI', 'NDSN', 'NSC', 'NTRS', 'NOC', 'NCLH', 'NRG', 'NUE', 'NVDA', 'NVR', 'NXPI', 'ORLY', 'OXY', 'ODFL', 'OMC', 'ON', 'OKE', 'ORCL', 'OTIS', 'PCAR', 'PKG', 'PLTR', 'PANW', 'PARA', 'PH', 'PAYX', 'PAYC', 'PYPL', 'PNR', 'PEP', 'PFE', 'PCG', 'PM', 'PSX', 'PNW', 'PNC', 'POOL', 'PPG', 'PPL', 'PFG', 'PG', 'PGR', 'PLD', 'PRU', 'PEG', 'PTC', 'PSA', 'PHM', 'PWR', 'QCOM', 'DGX', 'RL', 'RJF', 'RTX', 'O', 'REG', 'REGN', 'RF', 'RSG', 'RMD', 'RVTY', 'ROK', 'ROL', 'ROP', 'ROST', 'RCL', 'SPGI', 'CRM', 'SBAC', 'SLB', 'STX', 'SRE', 'NOW', 'SHW', 'SPG', 'SWKS', 'SJM', 'SW', 'SNA', 'SOLV', 'SO', 'LUV', 'SWK', 'SBUX', 'STT', 'STLD', 'STE', 'SYK', 'SMCI', 'SYF', 'SNPS', 'SYY', 'TMUS', 'TROW', 'TTWO', 'TPR', 'TRGP', 'TGT', 'TEL', 'TDY', 'TER', 'TSLA', 'TXN', 'TPL', 'TXT', 'TMO', 'TJX', 'TKO', 'TTD', 'TSCO', 'TT', 'TDG', 'TRV', 'TRMB', 'TFC', 'TYL', 'TSN', 'USB', 'UBER', 'UDR', 'ULTA', 'UNP', 'UAL', 'UPS', 'URI', 'UNH', 'UHS', 'VLO', 'VTR', 'VLTO', 'VRSN', 'VRSK', 'VZ', 'VRTX', 'VTRS', 'VICI', 'V', 'VST', 'VMC', 'WRB', 'GWW', 'WAB', 'WBA', 'WMT', 'DIS', 'WBD', 'WM', 'WAT', 'WEC', 'WFC', 'WELL', 'WST', 'WDC', 'WY', 'WSM', 'WMB', 'WTW', 'WDAY', 'WYNN', 'XEL', 'XYL', 'YUM', 'ZBRA', 'ZBH', 'ZTS']
+
 CSV = "../fcf_dataset.csv"
 HORIZONS = {
     "6M": ("6M_FCFps_growth", "6M_Price_growth"),
@@ -46,6 +53,12 @@ parser.add_argument("--show-robust", action="store_true", default=True,
                     help="Show robust regression lines alongside OLS")
 parser.add_argument("--save-plots", action="store_true",
                     help="Save plots to files instead of showing them")
+parser.add_argument("--nasdaq100-only", action="store_true",
+                    help="Restrict analysis to Nasdaq-100 (QQQ) tickers only")
+parser.add_argument("--dow30-only", action="store_true",
+                    help="Restrict analysis to Dow Jones 30 tickers only")
+parser.add_argument("--sp500-only", action="store_true",
+                    help="Restrict analysis to S&P 500 tickers only")
 args = parser.parse_args()
 
 # -----------------------------------------------------------------------------
@@ -150,7 +163,7 @@ def format_results_table(results_dict, horizon_label):
     print(f"REGRESSION RESULTS FOR {horizon_label}")
     print(f"{'='*80}")
     
-    headers = ["Tier", "N", "OLS β₁", "OLS R^2", "OLS RSS", "Robust β₁", "Robust R^2", "Robust RSS", "p-value"]
+    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value"]
     print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10}")
     print("-" * 80)
     
@@ -171,6 +184,21 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
     
     # We need the growth columns plus Market_Cap
     df = df_full[["Ticker", "Market_Cap", fcfps_col, price_col]].dropna()
+
+    # Filter to specific index tickers if requested
+    index_filter = None
+    if args.nasdaq100_only:
+        df = df[df["Ticker"].isin(NASDAQ100_TICKERS)]
+        index_filter = "Nasdaq-100"
+    elif args.dow30_only:
+        df = df[df["Ticker"].isin(DOW30_TICKERS)]
+        index_filter = "Dow Jones 30"
+    elif args.sp500_only:
+        df = df[df["Ticker"].isin(SP500_TICKERS)]
+        index_filter = "S&P 500"
+    
+    if index_filter:
+        print(f"Filtering to {index_filter} tickers only ({len(df)} observations)")
 
     # Convert to % points
     fcf_pct_col = f"{horizon_label}_FCF_pct"
@@ -249,8 +277,9 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
             ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
                     label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
 
-    ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier\n"
-                f"(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
+    ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier" + 
+                (f" ({index_filter} Only)" if index_filter else "") + 
+                f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
     ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
     ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -258,9 +287,10 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
     plt.tight_layout()
     
     if args.save_plots:
-        plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression.png", 
+        filename_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
+        plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png", 
                    dpi=300, bbox_inches='tight')
-        print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression.png")
+        print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png")
     else:
         plt.show()
 
@@ -298,16 +328,18 @@ if args.single_panel and all_horizon_results:
                 ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), 
                        lw=2, linestyle='--', label=f"{name} Robust")
         
-        ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier")
+        ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier" + 
+                    (f" ({index_filter} Only)" if index_filter else ""))
         ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
         ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
         ax.grid(alpha=0.3)
         ax.legend(fontsize="x-small")
     
     if args.save_plots:
-        plt.savefig("all_horizons_market_cap_robust_regression.png", 
+        filename_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
+        plt.savefig(f"all_horizons_market_cap_robust_regression{filename_suffix}.png", 
                    dpi=300, bbox_inches='tight')
-        print("Saved combined plot: all_horizons_market_cap_robust_regression.png")
+        print(f"Saved combined plot: all_horizons_market_cap_robust_regression{filename_suffix}.png")
     else:
         plt.show()
 
