@@ -35,6 +35,7 @@ warnings.simplefilter("ignore", category=FutureWarning)
 
 _lock = threading.Lock()
 
+
 ###############################################################################
 # ----------------------------- I/O HELPERS --------------------------------- #
 ###############################################################################
@@ -51,14 +52,17 @@ def safe_write_csv(df: pd.DataFrame, path: str) -> None:
                 raise
             time.sleep(0.1)
 
+
 def read_master() -> pd.DataFrame:
     if not os.path.exists(MASTER_CSV):
         raise FileNotFoundError(f"{MASTER_CSV} not found - create it first.")
     return pd.read_csv(MASTER_CSV, parse_dates=["Report Date"])
 
+
 def save_progress(ticker: str) -> None:
     with open(PROGRESS_FILE, "w", encoding="utf-8") as fh:
         fh.write(ticker + "\n")
+
 
 def load_progress() -> str | None:
     if not os.path.exists(PROGRESS_FILE):
@@ -66,6 +70,7 @@ def load_progress() -> str | None:
     with open(PROGRESS_FILE, "r", encoding="utf-8") as fh:
         last = fh.readline().strip()
         return last or None
+
 
 ###############################################################################
 # -------------------- YAHOO FINANCE WRAPPER (RETRY) ------------------------ #
@@ -80,6 +85,7 @@ def yfin_retry(method, *args, **kwargs):
             wait = i * 2
             print(f"    retry {i}/{MAX_YFIN_RETRY} after: {ex} (sleep {wait}s)")
             time.sleep(wait)
+
 
 def get_quarterly_cashflow(tkr: str) -> Optional[pd.DataFrame]:
     yft = yf.Ticker(tkr)
@@ -103,35 +109,35 @@ def get_quarterly_cashflow(tkr: str) -> Optional[pd.DataFrame]:
     cf.index.name = "Report Date"
     return cf
 
+
 def get_quarterly_income(tkr: str) -> Optional[pd.DataFrame]:
     inc = yf.Ticker(tkr).quarterly_income_stmt.T
     if inc.empty:
         return None
     rev_col = next((c for c in ["Total Revenue", "Revenue"] if c in inc.columns), None)
-    ni_col  = "Net Income" if "Net Income" in inc.columns else None
+    ni_col = "Net Income" if "Net Income" in inc.columns else None
     if not rev_col or not ni_col:
         return None
     inc = inc[[rev_col, ni_col]].rename(columns={rev_col: "Revenue", ni_col: "Net Income"})
     inc.index.name = "Report Date"
     return inc
 
+
 def nearest_price(yft: yf.Ticker, rpt_dates: pd.Index) -> pd.DataFrame:
     start = (rpt_dates.min() - timedelta(days=1)).strftime("%Y-%m-%d")
-    end   = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
-    hist  = yfin_retry(yft.history, start=start, end=end, interval="1d")
+    end = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    hist = yfin_retry(yft.history, start=start, end=end, interval="1d")
     if isinstance(hist, tuple):
         hist = hist[0]
     if hist.empty:
-        return pd.DataFrame({"Price": [np.nan]*len(rpt_dates),
-                             "Volume": [np.nan]*len(rpt_dates)},
-                             index=rpt_dates)
+        return pd.DataFrame({"Price": [np.nan] * len(rpt_dates),
+                             "Volume": [np.nan] * len(rpt_dates)},
+                            index=rpt_dates)
 
     hist.index = pd.to_datetime(hist.index).tz_localize(None)
-    prices = []
-    volumes = []
+    prices, volumes = [], []
     for d in rpt_dates:
-        mask = (hist.index >= d) & (hist.index <= d + timedelta(days=PRICE_LOOKAHEAD_DAYS))
-        sub = hist.loc[mask]
+        sub = hist.loc[(hist.index >= d) & (hist.index <= d + timedelta(days=PRICE_LOOKAHEAD_DAYS))]
         if not sub.empty:
             prices.append(sub["Close"].iloc[0])
             volumes.append(sub["Volume"].iloc[0])
@@ -140,11 +146,12 @@ def nearest_price(yft: yf.Ticker, rpt_dates: pd.Index) -> pd.DataFrame:
             volumes.append(np.nan)
     return pd.DataFrame({"Price": prices, "Volume": volumes}, index=rpt_dates)
 
+
 ###############################################################################
 # ---------------------- COMPUTE A SINGLE TICKER FRAME ---------------------- #
 ###############################################################################
 def build_one_ticker(tkr: str) -> Optional[pd.DataFrame]:
-    cf  = get_quarterly_cashflow(tkr)
+    cf = get_quarterly_cashflow(tkr)
     inc = get_quarterly_income(tkr)
     if cf is None or cf.empty or inc is None or inc.empty:
         print(f"⚠️  {tkr:5}: missing cash-flow or income data")
@@ -156,29 +163,29 @@ def build_one_ticker(tkr: str) -> Optional[pd.DataFrame]:
         return None
 
     yft = yf.Ticker(tkr)
-    price_vol_df = nearest_price(yft, df.index)
-    df["Price"]  = price_vol_df["Price"]
-    df["Volume"] = price_vol_df["Volume"]
+    pv = nearest_price(yft, df.index)
+    df["Price"], df["Volume"] = pv["Price"], pv["Volume"]
     df.dropna(subset=["Price"], inplace=True)
     if df.empty:
         print(f"⚠️  {tkr:5}: no matching prices")
         return None
 
     df["FCF_per_share"] = df["FCF"] / df["Shares"]
-    df["Market_Cap"]    = df["Price"] * df["Shares"]
+    df["Market_Cap"] = df["Price"] * df["Shares"]
     info = yft.get_info()
     total_debt = info.get("totalDebt", np.nan)
-    cash       = info.get("totalCash", np.nan)
+    cash = info.get("totalCash", np.nan)
     df["EV"] = df["Market_Cap"] + total_debt - cash
 
     df.sort_index(inplace=True)
     df.reset_index(inplace=True)
     df.insert(0, "Ticker", tkr)
 
-    cols = ["Ticker", "Report Date", "Price", "Volume", "Market_Cap", "EV",
-            "Revenue", "Net Income",
-            "FCF", "FCF_per_share"]
-    return df[cols]
+    return df[[
+        "Ticker", "Report Date", "Price", "Volume", "Market_Cap", "EV",
+        "Revenue", "Net Income", "FCF", "FCF_per_share"
+    ]]
+
 
 ###############################################################################
 # ------------- RECOMPUTE GROWTH COLUMNS FOR A SINGLE TICKER --------------- #
@@ -187,22 +194,36 @@ def recompute_growth_for_ticker(df: pd.DataFrame) -> pd.DataFrame:
     """df – rows of one ticker only, sorted by Report Date."""
     df = df.sort_values("Report Date").copy()
 
-    df["6M_Price_growth"]     = df["Price"].pct_change(2)
-    df["1Y_Price_growth"]     = df["Price"].pct_change(4)
-    df["2Y_Price_growth"]     = df["Price"].pct_change(8)
-    df["3Y_Price_growth"]     = df["Price"].pct_change(12)
+    # price growth
+    df["6M_Price_growth"] = df["Price"].pct_change(2)
+    df["1Y_Price_growth"] = df["Price"].pct_change(4)
+    df["2Y_Price_growth"] = df["Price"].pct_change(8)
+    df["3Y_Price_growth"] = df["Price"].pct_change(12)
 
-    df["6M_FCFps_growth"]     = df["FCF_per_share"].pct_change(2)
-    df["1Y_FCFps_growth"]     = df["FCF_per_share"].pct_change(4)
-    df["2Y_FCFps_growth"]     = df["FCF_per_share"].pct_change(8)
-    df["3Y_FCFps_growth"]     = df["FCF_per_share"].pct_change(12)
+    # FCF/share growth
+    df["6M_FCFps_growth"] = df["FCF_per_share"].pct_change(2)
+    df["1Y_FCFps_growth"] = df["FCF_per_share"].pct_change(4)
+    df["2Y_FCFps_growth"] = df["FCF_per_share"].pct_change(8)
+    df["3Y_FCFps_growth"] = df["FCF_per_share"].pct_change(12)
 
+    # net income growth
     df["6M_NetIncome_growth"] = df["Net Income"].pct_change(2)
     df["1Y_NetIncome_growth"] = df["Net Income"].pct_change(4)
     df["2Y_NetIncome_growth"] = df["Net Income"].pct_change(8)
     df["3Y_NetIncome_growth"] = df["Net Income"].pct_change(12)
 
+    # volume growth
+    df["6M_Volume_growth"] = df["Volume"].pct_change(2)
+    df["1Y_Volume_growth"] = df["Volume"].pct_change(4)
+    df["2Y_Volume_growth"] = df["Volume"].pct_change(8)
+    df["3Y_Volume_growth"] = df["Volume"].pct_change(12)
+    # revenue growth
+    df["6M_Revenue_growth"] = df["Revenue"].pct_change(2)
+    df["1Y_Revenue_growth"] = df["Revenue"].pct_change(4)
+    df["2Y_Revenue_growth"] = df["Revenue"].pct_change(8)
+    df["3Y_Revenue_growth"] = df["Revenue"].pct_change(12)
     return df
+
 
 ###############################################################################
 # -------------------------------- MAIN ------------------------------------- #
@@ -210,7 +231,6 @@ def recompute_growth_for_ticker(df: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     master = read_master()
     tickers = sorted(master["Ticker"].unique())
-
     last_done = load_progress()
     if last_done:
         print(f"⏭️  Resuming after '{last_done}'")
@@ -220,8 +240,9 @@ def main() -> None:
             pass
 
     if not tickers:
-        print("Nothing to do - every ticker already processed.")
+        print("Nothing to do – every ticker already processed.")
         return
+
     total = len(tickers)
     processed_count = 0
     print(f"Tickers left: {total}")
@@ -247,7 +268,6 @@ def main() -> None:
 
                         mask = (new_df["Report Date"] > last_date) if pd.notna(last_date) else slice(None)
                         delta = new_df.loc[mask]
-
                         if not delta.empty:
                             master = pd.concat([master, delta], ignore_index=True)
 
@@ -269,6 +289,7 @@ def main() -> None:
                 print(f"⚠️  {tkr}: {ex}")
 
     print("\n✅ All done!")
+
 
 if __name__ == "__main__":
     main()
