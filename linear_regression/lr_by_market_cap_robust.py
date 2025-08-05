@@ -18,6 +18,7 @@ import argparse
 from sklearn.linear_model import HuberRegressor
 from sklearn.metrics import r2_score
 import warnings
+import math
 warnings.filterwarnings('ignore')
 
 
@@ -160,25 +161,50 @@ def get_column_names(horizon, analysis_mode):
     y_col = f"{horizon}_Price_growth"
     return x_col, y_col
 
-def prepare_data_for_analysis(df, horizon, analysis_mode):
+def prepare_data_for_analysis(df, horizon, analysis_mode, use_log_price_change=False, log_x_axis=False):
     """Prepare data for analysis by converting to percentages and setting up column names"""
     mode_config = ANALYSIS_MODES[analysis_mode]
     x_col, y_col = get_column_names(horizon, analysis_mode)
     
-    # Create percentage column names
-    x_pct_col = f"{horizon}_{analysis_mode}_pct"
-    y_pct_col = f"{horizon}_Price_pct"
-    
-    # Convert to percentages
-    if mode_config["already_percentage"]:
-        df[x_pct_col] = df[x_col]  # Already in percentage
+    # Create column names
+    if log_x_axis:
+        x_pct_col = f"{horizon}_{analysis_mode}_log"
     else:
-        df[x_pct_col] = df[x_col] * 100  # Convert to percentage
+        x_pct_col = f"{horizon}_{analysis_mode}_pct"
     
-    df[y_pct_col] = df[y_col] * 100  # Always convert price to percentage
+    if use_log_price_change:
+        y_pct_col = f"{horizon}_Price_log"
+    else:
+        y_pct_col = f"{horizon}_Price_pct"
+    
+    # Convert x-axis based on the flag
+    if log_x_axis:
+        # Apply log transformation to x-axis values
+        # Add 1 and take log to handle negative values and zeros (for growth rates)
+        if mode_config["already_percentage"]:
+            # For already percentage data like FCF yield, just take absolute value and add small constant if needed
+            df[x_pct_col] = df[x_col].apply(lambda x: math.log(abs(x) + 0.01) if not np.isnan(x) and not isinstance(x, str) else np.nan)
+        else:
+            # For growth rates, use log(1 + x) to handle negative growth
+            df[x_pct_col] = df[x_col].apply(lambda x: math.log(1 + x) if (1 + x) > 0 and not np.isnan(x) and not np.isinf(x) else np.nan)
+    else:
+        # Regular percentage conversion
+        if mode_config["already_percentage"]:
+            df[x_pct_col] = df[x_col]  # Already in percentage
+        else:
+            df[x_pct_col] = df[x_col] * 100  # Convert to percentage
+    
+    # Convert y-axis based on the flag
+    if use_log_price_change:
+        # Convert to log of (1 + price_change) to handle negative values
+        df[y_pct_col] = df[y_col].apply(lambda x: math.log(1 + x) if (1 + x) > 0 and not np.isnan(x) and not np.isinf(x) else np.nan)
+    else:
+        df[y_pct_col] = df[y_col] * 100  # Convert to percentage
     
     # Generate axis label
     x_axis_label = mode_config["x_label_template"].format(horizon=horizon)
+    if log_x_axis:
+        x_axis_label = f"Log {x_axis_label}" if not mode_config["already_percentage"] else f"Log {x_axis_label.replace(' (%)', '')}"
     
     return x_pct_col, y_pct_col, x_axis_label
 
@@ -193,11 +219,13 @@ def get_index_filter_info(args):
     else:
         return None, None
 
-def get_filename_suffix(analysis_mode, index_filter):
+def get_filename_suffix(analysis_mode, index_filter, use_log_price_change=False, log_x_axis=False):
     """Generate filename suffix for saving plots"""
     mode_suffix = f"_{analysis_mode}" if analysis_mode != "fcf_growth" else ""
     index_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
-    return mode_suffix + index_suffix
+    log_suffix = "_log_price" if use_log_price_change else ""
+    x_log_suffix = "_log_x" if log_x_axis else ""
+    return mode_suffix + index_suffix + log_suffix + x_log_suffix
 
 # ---------------------------------------------------------------------
 # CLI
@@ -229,6 +257,10 @@ parser.add_argument("--by-year-windows", action="store_true",
                     help="Produce separate graphs for each sliding year window (e.g., 2019-2021, 2020-2022, etc.)")
 parser.add_argument("--window-timeframe", choices=["6M", "1Y", "2Y", "3Y"], default="1Y",
                     help="Time frame to use when --by-year-windows is enabled (default: 1Y)")
+parser.add_argument("--use-log-price-change", action="store_true",
+                    help="Use log price change on the y-axis instead of percentage price change")
+parser.add_argument("--log-x-axis", action="store_true",
+                    help="Apply log transformation to the x-axis values")
 args = parser.parse_args()
 
 # Validation for year windows mode
@@ -411,7 +443,7 @@ if args.by_year_windows:
     
     print(f"Available year windows for {args.window_timeframe} analysis: {year_windows}")
 
-def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_filter):
+def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_filter, use_log_price_change=False, log_x_axis=False):
     """Analyze data for a specific horizon and return results"""
     x_col, y_col = get_column_names(horizon, analysis_mode_key)
     
@@ -428,7 +460,7 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
         return None, None, None
     
     # Prepare data for analysis
-    x_pct_col, y_pct_col, x_axis_label = prepare_data_for_analysis(df_filtered, horizon, analysis_mode_key)
+    x_pct_col, y_pct_col, x_axis_label = prepare_data_for_analysis(df_filtered, horizon, analysis_mode_key, use_log_price_change, log_x_axis)
     
     # Define cap tiers
     largest_market_cap_stocks = df_filtered["Market_Cap"].quantile(EXTREME_COMPANIES_PERCENTS / 100)
@@ -447,9 +479,16 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
         sub = df_filtered.loc[idx]
         if len(sub) < 5:  # Skip if too few observations
             continue
+        
+        # Extract values and filter out NaN values after transformation
+        valid_mask = sub[x_pct_col].notna() & sub[y_pct_col].notna()
+        sub_clean = sub[valid_mask]
+        
+        if len(sub_clean) < 5:  # Skip if too few valid observations after filtering NaN
+            continue
             
-        x_vals = sub[x_pct_col].values
-        y_vals = sub[y_pct_col].values
+        x_vals = sub_clean[x_pct_col].values
+        y_vals = sub_clean[y_pct_col].values
         
         if name == "Micro-caps":
             r = enhanced_regression_analysis(x_vals, y_vals,
@@ -487,7 +526,7 @@ if args.by_year_windows:
             
             # Use the new generic analysis function
             results, x_axis_label, df_filtered = analyze_horizon_data(
-                df_window, horizon_label, analysis_mode_key, index_tickers, index_filter
+                df_window, horizon_label, analysis_mode_key, index_tickers, index_filter, args.use_log_price_change, args.log_x_axis
             )
             
             if results is None:
@@ -530,13 +569,14 @@ if args.by_year_windows:
                             (f" ({index_filter} Only)" if index_filter else "") + 
                             f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
                 ax.set_xlabel(x_axis_label)
-                ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
+                y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
+                ax.set_ylabel(y_label)
                 ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 ax.grid(alpha=0.3)
                 plt.tight_layout()
                 
                 if args.save_plots:
-                    filename_suffix = get_filename_suffix(analysis_mode_key, index_filter)
+                    filename_suffix = get_filename_suffix(analysis_mode_key, index_filter, args.use_log_price_change, args.log_x_axis)
                     plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{filename_suffix}_{start_year}_{end_year}.png", 
                                dpi=300, bbox_inches='tight')
                     print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{filename_suffix}_{start_year}_{end_year}.png")
@@ -549,7 +589,7 @@ else:
         
         # Use the new generic analysis function
         results, x_axis_label, df_filtered = analyze_horizon_data(
-            df_full, horizon_label, analysis_mode_key, index_tickers, index_filter
+            df_full, horizon_label, analysis_mode_key, index_tickers, index_filter, args.use_log_price_change, args.log_x_axis
         )
         
         if results is None:
@@ -597,13 +637,14 @@ else:
                         (f" ({index_filter} Only)" if index_filter else "") + 
                         f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
             ax.set_xlabel(x_axis_label)
-            ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
+            y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
+            ax.set_ylabel(y_label)
             ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             ax.grid(alpha=0.3)
             plt.tight_layout()
             
             if args.save_plots:
-                filename_suffix = get_filename_suffix(analysis_mode_key, index_filter)
+                filename_suffix = get_filename_suffix(analysis_mode_key, index_filter, args.use_log_price_change, args.log_x_axis)
                 plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png", 
                            dpi=300, bbox_inches='tight')
                 print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png")
@@ -647,12 +688,13 @@ if args.single_panel and all_horizon_results and not args.no_plots and not args.
                     (f" ({index_filter} Only)" if index_filter else ""))
         x_axis_label = ANALYSIS_MODES[analysis_mode_key]["x_label_template"].format(horizon=horizon_label)
         ax.set_xlabel(x_axis_label)
-        ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
+        y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
+        ax.set_ylabel(y_label)
         ax.grid(alpha=0.3)
         ax.legend(fontsize="x-small")
     
     if args.save_plots:
-        filename_suffix = get_filename_suffix(analysis_mode_key, index_filter)
+        filename_suffix = get_filename_suffix(analysis_mode_key, index_filter, args.use_log_price_change, args.log_x_axis)
         plt.savefig(f"all_horizons_market_cap_robust_regression{filename_suffix}.png", 
                    dpi=300, bbox_inches='tight')
         print(f"Saved combined plot: all_horizons_market_cap_robust_regression{filename_suffix}.png")
@@ -663,6 +705,8 @@ if args.single_panel and all_horizon_results and not args.no_plots and not args.
 if not args.by_year_windows:
     print(f"\n{'='*80}")
     print(f"SUMMARY: R^2 COMPARISON ACROSS HORIZONS ({analysis_mode_name})")
+    if args.use_log_price_change:
+        print("Using log price change on y-axis")
     print(f"{'='*80}")
     print(f"{'Horizon':<10} {'All Samples OLS R^2':<20} {'All Samples Robust R^2':<22} {'Mega-caps OLS R^2':<18} {'Micro-caps OLS R^2':<18}")
     print("-" * 80)
