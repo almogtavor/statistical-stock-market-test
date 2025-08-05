@@ -9,7 +9,6 @@ Price Δ vs FCFps Δ analysis for each segment, including:
 - Comprehensive statistical metrics
 """
 
-import sys
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -22,144 +21,79 @@ import math
 warnings.filterwarnings('ignore')
 
 
-EXTREME_COMPANIES_PERCENTS = 10 # setting to 10% means we'll measure the top 10% companies, and lowest 10%
+# Constants
+EXTREME_COMPANIES_PERCENTS = 10
 P_LOWEST_CAP_CLIPPING_HIGH = 95
 P_LOWEST_CAP_CLIPPING_LOW = 5
+CSV = "../fcf_dataset.csv"
+HORIZONS = ["6M", "1Y", "2Y", "3Y"]
 
 # Index ticker lists
-NASDAQ100_TICKERS = ['ADBE', 'AMD', 'ABNB', 'GOOGL', 'GOOG', 'AMZN', 'AEP', 'AMGN', 'ADI', 'AAPL', 'AMAT', 'APP', 'ARM', 'ASML', 'AZN', 'TEAM', 'ADSK', 'ADP', 'AXON', 'BKR', 'BIIB', 'BKNG', 'AVGO', 'CDNS', 'CDW', 'CHTR', 'CTAS', 'CSCO', 'CCEP', 'CTSH', 'CMCSA', 'CEG', 'CPRT', 'CSGP', 'COST', 'CRWD', 'CSX', 'DDOG', 'DXCM', 'FANG', 'DASH', 'EA', 'EXC', 'FAST', 'FTNT', 'GEHC', 'GILD', 'GFS', 'HON', 'IDXX', 'INTC', 'INTU', 'ISRG', 'KDP', 'KLAC', 'KHC', 'LRCX', 'LIN', 'LULU', 'MAR', 'MRVL', 'MELI', 'META', 'MCHP', 'MU', 'MSFT', 'MSTR', 'MDLZ', 'MNST', 'NFLX', 'NVDA', 'NXPI', 'ORLY', 'ODFL', 'ON', 'PCAR', 'PLTR', 'PANW', 'PAYX', 'PYPL', 'PDD', 'PEP', 'QCOM', 'REGN', 'ROP', 'ROST', 'SHOP', 'SBUX', 'SNPS', 'TMUS', 'TTWO', 'TSLA', 'TXN', 'TRI', 'TTD', 'VRSK', 'VRTX', 'WBD', 'WDAY', 'XEL', 'ZS']
-
-DOW30_TICKERS = ['MMM', 'AXP', 'AMGN', 'AMZN', 'AAPL', 'BA', 'CAT', 'CVX', 'CSCO', 'KO', 'DIS', 'GS', 'HD', 'HON', 'IBM', 'JNJ', 'JPM', 'MCD', 'MRK', 'MSFT', 'NKE', 'NVDA', 'PG', 'CRM', 'SHW', 'TRV', 'UNH', 'VZ', 'V', 'WMT']
-
-SP500_TICKERS = ['MMM', 'AOS', 'ABT', 'ABBV', 'ACN', 'ADBE', 'AMD', 'AES', 'AFL', 'A', 'APD', 'ABNB', 'AKAM', 'ALB', 'ARE', 'ALGN', 'ALLE', 'LNT', 'ALL', 'GOOGL', 'GOOG', 'MO', 'AMZN', 'AMCR', 'AEE', 'AEP', 'AXP', 'AIG', 'AMT', 'AWK', 'AMP', 'AME', 'AMGN', 'APH', 'ADI', 'AON', 'APA', 'APO', 'AAPL', 'AMAT', 'APTV', 'ACGL', 'ADM', 'ANET', 'AJG', 'AIZ', 'T', 'ATO', 'ADSK', 'ADP', 'AZO', 'AVB', 'AVY', 'AXON', 'BKR', 'BALL', 'BAC', 'BAX', 'BDX', 'BRK.B', 'BBY', 'TECH', 'BIIB', 'BLK', 'BX', 'XYZ', 'BK', 'BA', 'BKNG', 'BSX', 'BMY', 'AVGO', 'BR', 'BRO', 'BF.B', 'BLDR', 'BG', 'BXP', 'CHRW', 'CDNS', 'CZR', 'CPT', 'CPB', 'COF', 'CAH', 'KMX', 'CCL', 'CARR', 'CAT', 'CBOE', 'CBRE', 'CDW', 'COR', 'CNC', 'CNP', 'CF', 'CRL', 'SCHW', 'CHTR', 'CVX', 'CMG', 'CB', 'CHD', 'CI', 'CINF', 'CTAS', 'CSCO', 'C', 'CFG', 'CLX', 'CME', 'CMS', 'KO', 'CTSH', 'COIN', 'CL', 'CMCSA', 'CAG', 'COP', 'ED', 'STZ', 'CEG', 'COO', 'CPRT', 'GLW', 'CPAY', 'CTVA', 'CSGP', 'COST', 'CTRA', 'CRWD', 'CCI', 'CSX', 'CMI', 'CVS', 'DHR', 'DRI', 'DDOG', 'DVA', 'DAY', 'DECK', 'DE', 'DELL', 'DAL', 'DVN', 'DXCM', 'FANG', 'DLR', 'DG', 'DLTR', 'D', 'DPZ', 'DASH', 'DOV', 'DOW', 'DHI', 'DTE', 'DUK', 'DD', 'EMN', 'ETN', 'EBAY', 'ECL', 'EIX', 'EW', 'EA', 'ELV', 'EMR', 'ENPH', 'ETR', 'EOG', 'EPAM', 'EQT', 'EFX', 'EQIX', 'EQR', 'ERIE', 'ESS', 'EL', 'EG', 'EVRG', 'ES', 'EXC', 'EXE', 'EXPE', 'EXPD', 'EXR', 'XOM', 'FFIV', 'FDS', 'FICO', 'FAST', 'FRT', 'FDX', 'FIS', 'FITB', 'FSLR', 'FE', 'FI', 'F', 'FTNT', 'FTV', 'FOXA', 'FOX', 'BEN', 'FCX', 'GRMN', 'IT', 'GE', 'GEHC', 'GEV', 'GEN', 'GNRC', 'GD', 'GIS', 'GM', 'GPC', 'GILD', 'GPN', 'GL', 'GDDY', 'GS', 'HAL', 'HIG', 'HAS', 'HCA', 'DOC', 'HSIC', 'HSY', 'HPE', 'HLT', 'HOLX', 'HD', 'HON', 'HRL', 'HST', 'HWM', 'HPQ', 'HUBB', 'HUM', 'HBAN', 'HII', 'IBM', 'IEX', 'IDXX', 'ITW', 'INCY', 'IR', 'PODD', 'INTC', 'ICE', 'IFF', 'IP', 'IPG', 'INTU', 'ISRG', 'IVZ', 'INVH', 'IQV', 'IRM', 'JBHT', 'JBL', 'JKHY', 'J', 'JNJ', 'JCI', 'JPM', 'K', 'KVUE', 'KDP', 'KEY', 'KEYS', 'KMB', 'KIM', 'KMI', 'KKR', 'KLAC', 'KHC', 'KR', 'LHX', 'LH', 'LRCX', 'LW', 'LVS', 'LDOS', 'LEN', 'LII', 'LLY', 'LIN', 'LYV', 'LKQ', 'LMT', 'L', 'LOW', 'LULU', 'LYB', 'MTB', 'MPC', 'MKTX', 'MAR', 'MMC', 'MLM', 'MAS', 'MA', 'MTCH', 'MKC', 'MCD', 'MCK', 'MDT', 'MRK', 'META', 'MET', 'MTD', 'MGM', 'MCHP', 'MU', 'MSFT', 'MAA', 'MRNA', 'MHK', 'MOH', 'TAP', 'MDLZ', 'MPWR', 'MNST', 'MCO', 'MS', 'MOS', 'MSI', 'MSCI', 'NDAQ', 'NTAP', 'NFLX', 'NEM', 'NWSA', 'NWS', 'NEE', 'NKE', 'NI', 'NDSN', 'NSC', 'NTRS', 'NOC', 'NCLH', 'NRG', 'NUE', 'NVDA', 'NVR', 'NXPI', 'ORLY', 'OXY', 'ODFL', 'OMC', 'ON', 'OKE', 'ORCL', 'OTIS', 'PCAR', 'PKG', 'PLTR', 'PANW', 'PARA', 'PH', 'PAYX', 'PAYC', 'PYPL', 'PNR', 'PEP', 'PFE', 'PCG', 'PM', 'PSX', 'PNW', 'PNC', 'POOL', 'PPG', 'PPL', 'PFG', 'PG', 'PGR', 'PLD', 'PRU', 'PEG', 'PTC', 'PSA', 'PHM', 'PWR', 'QCOM', 'DGX', 'RL', 'RJF', 'RTX', 'O', 'REG', 'REGN', 'RF', 'RSG', 'RMD', 'RVTY', 'ROK', 'ROL', 'ROP', 'ROST', 'RCL', 'SPGI', 'CRM', 'SBAC', 'SLB', 'STX', 'SRE', 'NOW', 'SHW', 'SPG', 'SWKS', 'SJM', 'SW', 'SNA', 'SOLV', 'SO', 'LUV', 'SWK', 'SBUX', 'STT', 'STLD', 'STE', 'SYK', 'SMCI', 'SYF', 'SNPS', 'SYY', 'TMUS', 'TROW', 'TTWO', 'TPR', 'TRGP', 'TGT', 'TEL', 'TDY', 'TER', 'TSLA', 'TXN', 'TPL', 'TXT', 'TMO', 'TJX', 'TKO', 'TTD', 'TSCO', 'TT', 'TDG', 'TRV', 'TRMB', 'TFC', 'TYL', 'TSN', 'USB', 'UBER', 'UDR', 'ULTA', 'UNP', 'UAL', 'UPS', 'URI', 'UNH', 'UHS', 'VLO', 'VTR', 'VLTO', 'VRSN', 'VRSK', 'VZ', 'VRTX', 'VTRS', 'VICI', 'V', 'VST', 'VMC', 'WRB', 'GWW', 'WAB', 'WBA', 'WMT', 'DIS', 'WBD', 'WM', 'WAT', 'WEC', 'WFC', 'WELL', 'WST', 'WDC', 'WY', 'WSM', 'WMB', 'WTW', 'WDAY', 'WYNN', 'XEL', 'XYL', 'YUM', 'ZBRA', 'ZBH', 'ZTS']
-
-CSV = "../fcf_dataset.csv"
+INDEX_TICKERS = {
+    "Nasdaq-100": ['ADBE', 'AMD', 'ABNB', 'GOOGL', 'GOOG', 'AMZN', 'AEP', 'AMGN', 'ADI', 'AAPL', 'AMAT', 'APP', 'ARM', 'ASML', 'AZN', 'TEAM', 'ADSK', 'ADP', 'AXON', 'BKR', 'BIIB', 'BKNG', 'AVGO', 'CDNS', 'CDW', 'CHTR', 'CTAS', 'CSCO', 'CCEP', 'CTSH', 'CMCSA', 'CEG', 'CPRT', 'CSGP', 'COST', 'CRWD', 'CSX', 'DDOG', 'DXCM', 'FANG', 'DASH', 'EA', 'EXC', 'FAST', 'FTNT', 'GEHC', 'GILD', 'GFS', 'HON', 'IDXX', 'INTC', 'INTU', 'ISRG', 'KDP', 'KLAC', 'KHC', 'LRCX', 'LIN', 'LULU', 'MAR', 'MRVL', 'MELI', 'META', 'MCHP', 'MU', 'MSFT', 'MSTR', 'MDLZ', 'MNST', 'NFLX', 'NVDA', 'NXPI', 'ORLY', 'ODFL', 'ON', 'PCAR', 'PLTR', 'PANW', 'PAYX', 'PYPL', 'PDD', 'PEP', 'QCOM', 'REGN', 'ROP', 'ROST', 'SHOP', 'SBUX', 'SNPS', 'TMUS', 'TTWO', 'TSLA', 'TXN', 'TRI', 'TTD', 'VRSK', 'VRTX', 'WBD', 'WDAY', 'XEL', 'ZS'],
+    "Dow Jones 30": ['MMM', 'AXP', 'AMGN', 'AMZN', 'AAPL', 'BA', 'CAT', 'CVX', 'CSCO', 'KO', 'DIS', 'GS', 'HD', 'HON', 'IBM', 'JNJ', 'JPM', 'MCD', 'MRK', 'MSFT', 'NKE', 'NVDA', 'PG', 'CRM', 'SHW', 'TRV', 'UNH', 'VZ', 'V', 'WMT'],
+    "S&P 500": ['MMM', 'AOS', 'ABT', 'ABBV', 'ACN', 'ADBE', 'AMD', 'AES', 'AFL', 'A', 'APD', 'ABNB', 'AKAM', 'ALB', 'ARE', 'ALGN', 'ALLE', 'LNT', 'ALL', 'GOOGL', 'GOOG', 'MO', 'AMZN', 'AMCR', 'AEE', 'AEP', 'AXP', 'AIG', 'AMT', 'AWK', 'AMP', 'AME', 'AMGN', 'APH', 'ADI', 'AON', 'APA', 'APO', 'AAPL', 'AMAT', 'APTV', 'ACGL', 'ADM', 'ANET', 'AJG', 'AIZ', 'T', 'ATO', 'ADSK', 'ADP', 'AZO', 'AVB', 'AVY', 'AXON', 'BKR', 'BALL', 'BAC', 'BAX', 'BDX', 'BRK.B', 'BBY', 'TECH', 'BIIB', 'BLK', 'BX', 'XYZ', 'BK', 'BA', 'BKNG', 'BSX', 'BMY', 'AVGO', 'BR', 'BRO', 'BF.B', 'BLDR', 'BG', 'BXP', 'CHRW', 'CDNS', 'CZR', 'CPT', 'CPB', 'COF', 'CAH', 'KMX', 'CCL', 'CARR', 'CAT', 'CBOE', 'CBRE', 'CDW', 'COR', 'CNC', 'CNP', 'CF', 'CRL', 'SCHW', 'CHTR', 'CVX', 'CMG', 'CB', 'CHD', 'CI', 'CINF', 'CTAS', 'CSCO', 'C', 'CFG', 'CLX', 'CME', 'CMS', 'KO', 'CTSH', 'COIN', 'CL', 'CMCSA', 'CAG', 'COP', 'ED', 'STZ', 'CEG', 'COO', 'CPRT', 'GLW', 'CPAY', 'CTVA', 'CSGP', 'COST', 'CTRA', 'CRWD', 'CCI', 'CSX', 'CMI', 'CVS', 'DHR', 'DRI', 'DDOG', 'DVA', 'DAY', 'DECK', 'DE', 'DELL', 'DAL', 'DVN', 'DXCM', 'FANG', 'DLR', 'DG', 'DLTR', 'D', 'DPZ', 'DASH', 'DOV', 'DOW', 'DHI', 'DTE', 'DUK', 'DD', 'EMN', 'ETN', 'EBAY', 'ECL', 'EIX', 'EW', 'EA', 'ELV', 'EMR', 'ENPH', 'ETR', 'EOG', 'EPAM', 'EQT', 'EFX', 'EQIX', 'EQR', 'ERIE', 'ESS', 'EL', 'EG', 'EVRG', 'ES', 'EXC', 'EXE', 'EXPE', 'EXPD', 'EXR', 'XOM', 'FFIV', 'FDS', 'FICO', 'FAST', 'FRT', 'FDX', 'FIS', 'FITB', 'FSLR', 'FE', 'FI', 'F', 'FTNT', 'FTV', 'FOXA', 'FOX', 'BEN', 'FCX', 'GRMN', 'IT', 'GE', 'GEHC', 'GEV', 'GEN', 'GNRC', 'GD', 'GIS', 'GM', 'GPC', 'GILD', 'GPN', 'GL', 'GDDY', 'GS', 'HAL', 'HIG', 'HAS', 'HCA', 'DOC', 'HSIC', 'HSY', 'HPE', 'HLT', 'HOLX', 'HD', 'HON', 'HRL', 'HST', 'HWM', 'HPQ', 'HUBB', 'HUM', 'HBAN', 'HII', 'IBM', 'IEX', 'IDXX', 'ITW', 'INCY', 'IR', 'PODD', 'INTC', 'ICE', 'IFF', 'IP', 'IPG', 'INTU', 'ISRG', 'IVZ', 'INVH', 'IQV', 'IRM', 'JBHT', 'JBL', 'JKHY', 'J', 'JNJ', 'JCI', 'JPM', 'K', 'KVUE', 'KDP', 'KEY', 'KEYS', 'KMB', 'KIM', 'KMI', 'KKR', 'KLAC', 'KHC', 'KR', 'LHX', 'LH', 'LRCX', 'LW', 'LVS', 'LDOS', 'LEN', 'LII', 'LLY', 'LIN', 'LYV', 'LKQ', 'LMT', 'L', 'LOW', 'LULU', 'LYB', 'MTB', 'MPC', 'MKTX', 'MAR', 'MMC', 'MLM', 'MAS', 'MA', 'MTCH', 'MKC', 'MCD', 'MCK', 'MDT', 'MRK', 'META', 'MET', 'MTD', 'MGM', 'MCHP', 'MU', 'MSFT', 'MAA', 'MRNA', 'MHK', 'MOH', 'TAP', 'MDLZ', 'MPWR', 'MNST', 'MCO', 'MS', 'MOS', 'MSI', 'MSCI', 'NDAQ', 'NTAP', 'NFLX', 'NEM', 'NWSA', 'NWS', 'NEE', 'NKE', 'NI', 'NDSN', 'NSC', 'NTRS', 'NOC', 'NCLH', 'NRG', 'NUE', 'NVDA', 'NVR', 'NXPI', 'ORLY', 'OXY', 'ODFL', 'OMC', 'ON', 'OKE', 'ORCL', 'OTIS', 'PCAR', 'PKG', 'PLTR', 'PANW', 'PARA', 'PH', 'PAYX', 'PAYC', 'PYPL', 'PNR', 'PEP', 'PFE', 'PCG', 'PM', 'PSX', 'PNW', 'PNC', 'POOL', 'PPG', 'PPL', 'PFG', 'PG', 'PGR', 'PLD', 'PRU', 'PEG', 'PTC', 'PSA', 'PHM', 'PWR', 'QCOM', 'DGX', 'RL', 'RJF', 'RTX', 'O', 'REG', 'REGN', 'RF', 'RSG', 'RMD', 'RVTY', 'ROK', 'ROL', 'ROP', 'ROST', 'RCL', 'SPGI', 'CRM', 'SBAC', 'SLB', 'STX', 'SRE', 'NOW', 'SHW', 'SPG', 'SWKS', 'SJM', 'SW', 'SNA', 'SOLV', 'SO', 'LUV', 'SWK', 'SBUX', 'STT', 'STLD', 'STE', 'SYK', 'SMCI', 'SYF', 'SNPS', 'SYY', 'TMUS', 'TROW', 'TTWO', 'TPR', 'TRGP', 'TGT', 'TEL', 'TDY', 'TER', 'TSLA', 'TXN', 'TPL', 'TXT', 'TMO', 'TJX', 'TKO', 'TTD', 'TSCO', 'TT', 'TDG', 'TRV', 'TRMB', 'TFC', 'TYL', 'TSN', 'USB', 'UBER', 'UDR', 'ULTA', 'UNP', 'UAL', 'UPS', 'URI', 'UNH', 'UHS', 'VLO', 'VTR', 'VLTO', 'VRSN', 'VRSK', 'VZ', 'VRTX', 'VTRS', 'VICI', 'V', 'VST', 'VMC', 'WRB', 'GWW', 'WAB', 'WBA', 'WMT', 'DIS', 'WBD', 'WM', 'WAT', 'WEC', 'WFC', 'WELL', 'WST', 'WDC', 'WY', 'WSM', 'WMB', 'WTW', 'WDAY', 'WYNN', 'XEL', 'XYL', 'YUM', 'ZBRA', 'ZBH', 'ZTS']
+}
 
 # Analysis mode configuration
 ANALYSIS_MODES = {
-    "fcf_growth": {
-        "name": "FCF Growth",
-        "x_column_template": "{horizon}_FCFps_growth",
-        "x_label_template": "{horizon} FCFps Growth (%)",
-        "multiply_by_100": True,  # Convert to percentage
-        "already_percentage": False
-    },
-    "fcf_yield": {
-        "name": "FCF Yield", 
-        "x_column_template": "FCF_yield",  # Same for all horizons
-        "x_label_template": "{horizon} FCF Yield (%)",
-        "multiply_by_100": False,  # Already in percentage
-        "already_percentage": True
-    },
-    "net_income_growth": {
-        "name": "Net Income Growth",
-        "x_column_template": "{horizon}_NetIncome_growth", 
-        "x_label_template": "{horizon} Net Income Growth (%)",
-        "multiply_by_100": True,
-        "already_percentage": False
-    },
-    "volume_growth": {
-        "name": "Volume Growth",
-        "x_column_template": "{horizon}_Volume_growth",
-        "x_label_template": "{horizon} Volume Growth (%)", 
-        "multiply_by_100": True,
-        "already_percentage": False
-    },
-    "revenue_growth": {
-        "name": "Revenue Growth",
-        "x_column_template": "{horizon}_Revenue_growth",
-        "x_label_template": "{horizon} Revenue Growth (%)",
-        "multiply_by_100": True,
-        "already_percentage": False
-    }
+    "fcf_growth": {"name": "FCF Growth", "x_column_template": "{horizon}_FCFps_growth", "x_label_template": "{horizon} FCFps Growth (%)", "already_percentage": False},
+    "fcf_yield": {"name": "FCF Yield", "x_column_template": "FCF_yield", "x_label_template": "{horizon} FCF Yield (%)", "already_percentage": True},
+    "net_income_growth": {"name": "Net Income Growth", "x_column_template": "{horizon}_NetIncome_growth", "x_label_template": "{horizon} Net Income Growth (%)", "already_percentage": False},
+    "volume_growth": {"name": "Volume Growth", "x_column_template": "{horizon}_Volume_growth", "x_label_template": "{horizon} Volume Growth (%)", "already_percentage": False},
+    "revenue_growth": {"name": "Revenue Growth", "x_column_template": "{horizon}_Revenue_growth", "x_label_template": "{horizon} Revenue Growth (%)", "already_percentage": False}
 }
 
-# Time horizons
-HORIZONS = ["6M", "1Y", "2Y", "3Y"]
-
-# Load data
+# Load and process data
 df_full = pd.read_csv(CSV, parse_dates=["Report Date"])
 
-def calculate_non_overlapping_net_income_growth(df_full):
-    # Sort by Ticker and Report Date to ensure proper time series ordering
-    df_full = df_full.sort_values(['Ticker', 'Report Date'])
+def calculate_non_overlapping_net_income_growth(df):
+    """Calculate non-overlapping net income growth rates"""
+    df = df.sort_values(['Ticker', 'Report Date'])
+    
+    # Remove existing columns if they exist
+    existing_cols = [col for col in df.columns if 'NetIncome_growth' in col]
+    if existing_cols:
+        print(f"Removing existing NetIncome growth columns: {existing_cols}")
+        df = df.drop(columns=existing_cols)
+    
+    df["Quarter"] = df["Report Date"].dt.quarter
+    
+    # Q1 data for annual calculations
+    df_q1 = df[df["Quarter"] == 1].copy().sort_values(['Ticker', 'Report Date'])
+    for i, horizon in enumerate(["1Y", "2Y", "3Y"], 1):
+        df_q1[f"{horizon}_NetIncome_growth"] = df_q1.groupby('Ticker')["Net Income"].pct_change(i)
+    
+    # Q3 data for 6M calculations
+    df_q3 = df[df["Quarter"] == 3].copy()
+    df_q1_6m = df_q1[['Ticker', 'Report Date', 'Net Income']].copy()
+    df_q1_6m['Year'] = df_q1_6m['Report Date'].dt.year
+    df_q3['Year'] = df_q3['Report Date'].dt.year
+    
+    df_6m = df_q3.merge(df_q1_6m, on=['Ticker', 'Year'], suffixes=('_Q3', '_Q1'), how='left')
+    df_6m["6M_NetIncome_growth"] = (df_6m['Net Income_Q3'] - df_6m['Net Income_Q1']) / df_6m['Net Income_Q1']
+    
+    # For 6M data, use the Q3 Report Date (which has suffix _Q3)
+    df_6m['Report Date'] = df_6m['Report Date_Q3']
+    
+    # Merge back
+    for data, cols in [(df_6m, ['6M_NetIncome_growth']), (df_q1, ['1Y_NetIncome_growth', '2Y_NetIncome_growth', '3Y_NetIncome_growth'])]:
+        merge_cols = ['Ticker', 'Report Date'] + cols
+        df = df.merge(data[merge_cols], on=['Ticker', 'Report Date'], how='left')
+    
+    return df
 
-    # Drop any existing NetIncome growth columns to ensure clean calculation
-    existing_ni_cols = [col for col in df_full.columns if 'NetIncome_growth' in col]
-    if existing_ni_cols:
-        print(f"Removing existing overlapping NetIncome growth columns: {existing_ni_cols}")
-        df_full = df_full.drop(columns=existing_ni_cols)
-
-    # Extract quarter information to filter for non-overlapping periods
-    df_full["Quarter"] = df_full["Report Date"].dt.quarter
-
-    # Filter to Q1 data only (March quarter-ends) to avoid overlapping periods
-    # This ensures we get exactly one observation per year per ticker, eliminating noise from overlapping windows
-    df_q1_only = df_full[df_full["Quarter"] == 1].copy().sort_values(['Ticker', 'Report Date'])
-
-    # Calculate growth rates on the filtered Q1-only data for clean non-overlapping periods
-    # Note: pct_change(1) on annual Q1 data = 1 year growth, pct_change(2) = 2 year growth, etc.
-    df_q1_only["1Y_NetIncome_growth"] = df_q1_only.groupby('Ticker')["Net Income"].pct_change(1)   # 1 year apart (Q1 to Q1)
-    df_q1_only["2Y_NetIncome_growth"] = df_q1_only.groupby('Ticker')["Net Income"].pct_change(2)   # 2 years apart  
-    df_q1_only["3Y_NetIncome_growth"] = df_q1_only.groupby('Ticker')["Net Income"].pct_change(3)   # 3 years apart
-
-    # Get Q3 data for 6-month comparisons
-    df_q3_only = df_full[df_full["Quarter"] == 3].copy().sort_values(['Ticker', 'Report Date'])
-
-    # Calculate 6M growth by comparing Q3 to Q1 of the same year
-    df_q1_for_6m = df_q1_only[['Ticker', 'Report Date', 'Net Income']].copy()
-    df_q1_for_6m['Year'] = df_q1_for_6m['Report Date'].dt.year
-    df_q1_for_6m = df_q1_for_6m.rename(columns={'Net Income': 'Q1_Net_Income'})
-
-    df_q3_for_6m = df_q3_only[['Ticker', 'Report Date', 'Net Income']].copy()
-    df_q3_for_6m['Year'] = df_q3_for_6m['Report Date'].dt.year
-    df_q3_for_6m = df_q3_for_6m.rename(columns={'Net Income': 'Q3_Net_Income'})
-
-    # Merge Q1 and Q3 data by Ticker and Year to calculate 6M growth
-    df_6m_growth = df_q3_for_6m.merge(
-        df_q1_for_6m[['Ticker', 'Year', 'Q1_Net_Income']], 
-        on=['Ticker', 'Year'], 
-        how='left'
-    )
-    df_6m_growth["6M_NetIncome_growth"] = (df_6m_growth['Q3_Net_Income'] - df_6m_growth['Q1_Net_Income']) / df_6m_growth['Q1_Net_Income']
-
-    # Merge the clean growth rates back to the main dataframe
-    growth_6m = df_6m_growth[['Ticker', 'Report Date', '6M_NetIncome_growth']]
-    df_full = df_full.merge(growth_6m, on=['Ticker', 'Report Date'], how='left')
-
-    growth_annual = df_q1_only[['Ticker', 'Report Date', '1Y_NetIncome_growth', '2Y_NetIncome_growth', '3Y_NetIncome_growth']]
-    df_full = df_full.merge(growth_annual, on=['Ticker', 'Report Date'], how='left')
-
-    print(f"Non-overlapping NetIncome growth calculation complete:")
-    print(f"  6M growth: {df_full['6M_NetIncome_growth'].notna().sum()} observations")
-    print(f"  1Y growth: {df_full['1Y_NetIncome_growth'].notna().sum()} observations") 
-    print(f"  2Y growth: {df_full['2Y_NetIncome_growth'].notna().sum()} observations")
-    print(f"  3Y growth: {df_full['3Y_NetIncome_growth'].notna().sum()} observations")
-
-    return df_full
-
-# Call the function to encapsulate the logic
 df_full = calculate_non_overlapping_net_income_growth(df_full)
 
 def get_analysis_mode_from_args(args):
     """Determine analysis mode from command line arguments"""
-    if args.use_fcf_yield:
-        return "fcf_yield"
-    elif args.use_net_income_growth:
-        return "net_income_growth"
-    elif args.use_volume_growth:
-        return "volume_growth"
-    elif args.use_revenue_growth:
-        return "revenue_growth"
-    else:
-        return "fcf_growth"
+    modes = [("use_fcf_yield", "fcf_yield"), ("use_net_income_growth", "net_income_growth"), 
+             ("use_volume_growth", "volume_growth"), ("use_revenue_growth", "revenue_growth")]
+    return next((mode for attr, mode in modes if getattr(args, attr)), "fcf_growth")
 
 def get_column_names(horizon, analysis_mode):
     """Get x and y column names for a given horizon and analysis mode"""
-    mode_config = ANALYSIS_MODES[analysis_mode]
-    x_col = mode_config["x_column_template"].format(horizon=horizon)
-    y_col = f"{horizon}_Price_growth"
-    return x_col, y_col
+    return ANALYSIS_MODES[analysis_mode]["x_column_template"].format(horizon=horizon), f"{horizon}_Price_growth"
 
 def prepare_data_for_analysis(df, horizon, analysis_mode, use_log_price_change=False, log_x_axis=False):
     """Prepare data for analysis by converting to percentages and setting up column names"""
@@ -167,113 +101,84 @@ def prepare_data_for_analysis(df, horizon, analysis_mode, use_log_price_change=F
     x_col, y_col = get_column_names(horizon, analysis_mode)
     
     # Create column names
+    x_pct_col = f"{horizon}_{analysis_mode}_{'log' if log_x_axis else 'pct'}"
+    y_pct_col = f"{horizon}_Price_{'log' if use_log_price_change else 'pct'}"
+    
+    # Helper function for safe log transformation
+    def safe_log(x, is_percentage=False):
+        if pd.isna(x) or np.isinf(x) or isinstance(x, str):
+            return np.nan
+        return math.log(abs(x) + 0.01) if is_percentage else math.log(1 + x) if (1 + x) > 0 else np.nan
+    
+    # Convert x-axis
     if log_x_axis:
-        x_pct_col = f"{horizon}_{analysis_mode}_log"
+        df[x_pct_col] = df[x_col].apply(lambda x: safe_log(x, mode_config["already_percentage"]))
     else:
-        x_pct_col = f"{horizon}_{analysis_mode}_pct"
+        df[x_pct_col] = df[x_col] if mode_config["already_percentage"] else df[x_col] * 100
     
+    # Convert y-axis
     if use_log_price_change:
-        y_pct_col = f"{horizon}_Price_log"
+        df[y_pct_col] = df[y_col].apply(lambda x: safe_log(x, False))
     else:
-        y_pct_col = f"{horizon}_Price_pct"
-    
-    # Convert x-axis based on the flag
-    if log_x_axis:
-        # Apply log transformation to x-axis values
-        # Add 1 and take log to handle negative values and zeros (for growth rates)
-        if mode_config["already_percentage"]:
-            # For already percentage data like FCF yield, just take absolute value and add small constant if needed
-            df[x_pct_col] = df[x_col].apply(lambda x: math.log(abs(x) + 0.01) if not np.isnan(x) and not isinstance(x, str) else np.nan)
-        else:
-            # For growth rates, use log(1 + x) to handle negative growth
-            df[x_pct_col] = df[x_col].apply(lambda x: math.log(1 + x) if (1 + x) > 0 and not np.isnan(x) and not np.isinf(x) else np.nan)
-    else:
-        # Regular percentage conversion
-        if mode_config["already_percentage"]:
-            df[x_pct_col] = df[x_col]  # Already in percentage
-        else:
-            df[x_pct_col] = df[x_col] * 100  # Convert to percentage
-    
-    # Convert y-axis based on the flag
-    if use_log_price_change:
-        # Convert to log of (1 + price_change) to handle negative values
-        df[y_pct_col] = df[y_col].apply(lambda x: math.log(1 + x) if (1 + x) > 0 and not np.isnan(x) and not np.isinf(x) else np.nan)
-    else:
-        df[y_pct_col] = df[y_col] * 100  # Convert to percentage
+        df[y_pct_col] = df[y_col] * 100
     
     # Generate axis label
     x_axis_label = mode_config["x_label_template"].format(horizon=horizon)
     if log_x_axis:
-        x_axis_label = f"Log {x_axis_label}" if not mode_config["already_percentage"] else f"Log {x_axis_label.replace(' (%)', '')}"
+        x_axis_label = f"Log {x_axis_label.replace(' (%)', '') if mode_config['already_percentage'] else x_axis_label}"
     
     return x_pct_col, y_pct_col, x_axis_label
 
 def get_index_filter_info(args):
     """Get index filter information from arguments"""
-    if args.nasdaq100_only:
-        return NASDAQ100_TICKERS, "Nasdaq-100"
-    elif args.dow30_only:
-        return DOW30_TICKERS, "Dow Jones 30" 
-    elif args.sp500_only:
-        return SP500_TICKERS, "S&P 500"
-    else:
-        return None, None
+    index_map = {
+        "nasdaq100_only": "Nasdaq-100",
+        "dow30_only": "Dow Jones 30", 
+        "sp500_only": "S&P 500"
+    }
+    for attr, name in index_map.items():
+        if getattr(args, attr):
+            return INDEX_TICKERS[name], name
+    return None, None
 
 def get_filename_suffix(analysis_mode, index_filter, use_log_price_change=False, log_x_axis=False):
     """Generate filename suffix for saving plots"""
-    mode_suffix = f"_{analysis_mode}" if analysis_mode != "fcf_growth" else ""
-    index_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
-    log_suffix = "_log_price" if use_log_price_change else ""
-    x_log_suffix = "_log_x" if log_x_axis else ""
-    return mode_suffix + index_suffix + log_suffix + x_log_suffix
+    parts = []
+    if analysis_mode != "fcf_growth":
+        parts.append(analysis_mode)
+    if index_filter:
+        parts.append(index_filter.lower().replace(' ', '_').replace('-', '_'))
+    if use_log_price_change:
+        parts.append("log_price")
+    if log_x_axis:
+        parts.append("log_x")
+    return "_" + "_".join(parts) if parts else ""
 
-# ---------------------------------------------------------------------
 # CLI
-# ---------------------------------------------------------------------
 parser = argparse.ArgumentParser()
-parser.add_argument("--single-panel", action="store_true",
-                    help="Overlay all horizons' All Samples results on one panel")
-parser.add_argument("--show-robust", action="store_true", default=True,
-                    help="Show robust regression lines alongside OLS")
-parser.add_argument("--save-plots", action="store_true",
-                    help="Save plots to files instead of showing them")
-parser.add_argument("--no-plots", action="store_true",
-                    help="Skip all plotting and show only statistical results")
-parser.add_argument("--nasdaq100-only", action="store_true",
-                    help="Restrict analysis to Nasdaq-100 (QQQ) tickers only")
-parser.add_argument("--dow30-only", action="store_true",
-                    help="Restrict analysis to Dow Jones 30 tickers only")
-parser.add_argument("--sp500-only", action="store_true",
-                    help="Restrict analysis to S&P 500 tickers only")
-parser.add_argument("--use-fcf-yield", action="store_true",
-                    help="Use FCF Yield (FCF/EV) instead of FCF growth rates")
-parser.add_argument("--use-net-income-growth", action="store_true",
-                    help="Use Net Income Growth rates instead of FCF growth rates")
-parser.add_argument("--use-volume-growth", action="store_true",
-                    help="Use Volume Growth rates as the x-axis instead of FCF growth rates")
-parser.add_argument("--use-revenue-growth", action="store_true",
-                    help="Use Revenue Growth rates as the x-axis instead of FCF growth rates")
-parser.add_argument("--by-year-windows", action="store_true",
-                    help="Produce separate graphs for each sliding year window (e.g., 2019-2021, 2020-2022, etc.)")
-parser.add_argument("--window-timeframe", choices=["6M", "1Y", "2Y", "3Y"], default="1Y",
-                    help="Time frame to use when --by-year-windows is enabled (default: 1Y)")
-parser.add_argument("--use-log-price-change", action="store_true",
-                    help="Use log price change on the y-axis instead of percentage price change")
-parser.add_argument("--log-x-axis", action="store_true",
-                    help="Apply log transformation to the x-axis values")
+parser.add_argument("--single-panel", action="store_true", help="Overlay all horizons' All Samples results on one panel")
+parser.add_argument("--show-robust", action="store_true", default=True, help="Show robust regression lines alongside OLS")
+parser.add_argument("--save-plots", action="store_true", help="Save plots to files instead of showing them")
+parser.add_argument("--no-plots", action="store_true", help="Skip all plotting and show only statistical results")
+parser.add_argument("--nasdaq100-only", action="store_true", help="Restrict analysis to Nasdaq-100 tickers only")
+parser.add_argument("--dow30-only", action="store_true", help="Restrict analysis to Dow Jones 30 tickers only")
+parser.add_argument("--sp500-only", action="store_true", help="Restrict analysis to S&P 500 tickers only")
+parser.add_argument("--use-fcf-yield", action="store_true", help="Use FCF Yield instead of FCF growth rates")
+parser.add_argument("--use-net-income-growth", action="store_true", help="Use Net Income Growth rates")
+parser.add_argument("--use-volume-growth", action="store_true", help="Use Volume Growth rates")
+parser.add_argument("--use-revenue-growth", action="store_true", help="Use Revenue Growth rates")
+parser.add_argument("--by-year-windows", action="store_true", help="Produce separate graphs for each sliding year window")
+parser.add_argument("--window-timeframe", choices=["6M", "1Y", "2Y", "3Y"], default="1Y", help="Time frame for year windows mode")
+parser.add_argument("--use-log-price-change", action="store_true", help="Use log price change on the y-axis")
+parser.add_argument("--log-x-axis", action="store_true", help="Apply log transformation to the x-axis values")
 args = parser.parse_args()
 
-# Validation for year windows mode
-if args.by_year_windows:
-    print(f"Year windows mode enabled - analyzing {args.window_timeframe} horizon across sliding year windows")
-    if args.single_panel:
-        print("Warning: --single-panel will be ignored in year windows mode")
-        args.single_panel = False
+# Validation and setup
+if args.by_year_windows and args.single_panel:
+    print("Warning: --single-panel ignored in year windows mode")
+    args.single_panel = False
 
-# Calculate FCF Yield if using yield mode
 if args.use_fcf_yield:
-    # Calculate FCF Yield as FCF / Market_Cap (expressed as percentage)
-    # Using Market Cap as proxy for EV since EV data is not available
     df_full["FCF_yield"] = (df_full["FCF"] / df_full["Market_Cap"]) * 100
 
 # -----------------------------------------------------------------------------
@@ -380,24 +285,18 @@ def enhanced_regression_analysis(x, y, p_low=0.2, p_high=99.8):
 
 
 def format_results_table(results_dict, horizon_label):
-    """
-    Print a nicely formatted table of results
-    """
-    print(f"\n{'='*80}")
-    print(f"REGRESSION RESULTS FOR {horizon_label}")
-    print(f"{'='*80}")
+    """Print a nicely formatted table of results"""
+    print(f"\n{'='*80}\nREGRESSION RESULTS FOR {horizon_label}\n{'='*80}")
     
-    # Update the formatted results table to include correlation coefficients
     headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "Pearson Corr", "Spearman Corr"]
     print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<14} {headers[10]:<14}")
     print("-" * 120)
 
     for name, r in results_dict.items():
-        if r is None:
-            continue
-        print(f"{name:<12} {r['n']:<6} {r['ols_slope']:<10.4f} {r['ols_r2']:<8.3f} {r['ols_rss']:<12.1f} "
-              f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g} "
-              f"{r['correlations']['pearson']:<14.3f} {r['correlations']['spearman']:<14.3f}")
+        if r:
+            print(f"{name:<12} {r['n']:<6} {r['ols_slope']:<10.4f} {r['ols_r2']:<8.3f} {r['ols_rss']:<12.1f} "
+                  f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g} "
+                  f"{r['correlations']['pearson']:<14.3f} {r['correlations']['spearman']:<14.3f}")
 
 
 # Store results for analysis
@@ -442,6 +341,81 @@ if args.by_year_windows:
         year_windows.append((start_year, end_year))
     
     print(f"Available year windows for {args.window_timeframe} analysis: {year_windows}")
+
+def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter=None, year_range=None):
+    """Create a regression plot with scatter points and fit lines"""
+    fig, ax = plt.subplots(figsize=(14, 10))
+    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+    
+    for name, r in results.items():
+        if not r:
+            continue
+            
+        # Scatter plot - Mid-caps use black color like All Samples for visibility
+        color = "black" if name == "Mid-caps" else colors[name]
+        ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
+                  color=color, label=f"{name} data (n={r['n']})")
+        
+        # Regression lines
+        fit_x = np.linspace(*r["xlim"], 200)
+        ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
+        ax.plot(fit_x, ols_fit_y, color=colors[name], lw=2, 
+                label=f"{name} OLS (R^2={r['ols_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
+        
+        if args.show_robust:
+            robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
+            ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
+                    label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
+
+    # Set labels and title
+    title = f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier"
+    if year_range:
+        title += f" ({year_range})"
+    if index_filter:
+        title += f" ({index_filter} Only)"
+    title += f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)"
+    
+    ax.set_title(title)
+    ax.set_xlabel(x_axis_label)
+    y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
+    ax.set_ylabel(y_label)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    
+    return fig
+
+def plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter):
+    """Plot regression data on a single subplot axis"""
+    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+    
+    for name, r in results.items():
+        if not r:
+            continue
+        # Mid-caps use black color like All Samples for visibility
+        color = "black" if name == "Mid-caps" else colors.get(name, "black")
+        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, 
+                  color=color, label=f"{name} (n={r['n']})")
+        
+        # OLS fit line
+        fit_x = np.linspace(*r["xlim"], 100)
+        ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
+        ax.plot(fit_x, ols_fit_y, color=colors.get(name, "black"), lw=2, 
+               label=f"{name} OLS (R²={r['ols_r2']:.3f})")
+        
+        # Robust fit line (if enabled)
+        if args.show_robust:
+            robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
+            ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), 
+                   lw=2, linestyle='--', label=f"{name} Robust (R²={r['robust_r2']:.3f})")
+
+    ax.set_title(f"{horizon_label} vs {analysis_mode_name}" + 
+                (f" ({index_filter})" if index_filter else ""))
+    ax.set_xlabel(x_axis_label)
+    y_label = f"{horizon_label} Log Price Change" if args.use_log_price_change else f"{horizon_label} Price Change (%)"
+    ax.set_ylabel(y_label)
+    ax.legend(fontsize="x-small")
+    ax.grid(alpha=0.3)
 
 def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_filter, use_log_price_change=False, log_x_axis=False):
     """Analyze data for a specific horizon and return results"""
@@ -537,43 +511,8 @@ if args.by_year_windows:
 
             # Create plot for this year window (skip if --no-plots)
             if not args.no_plots and results:
-                fig, ax = plt.subplots(figsize=(14, 10))
-                colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
-                
-                # Plot data points and regression lines
-                for name, r in results.items():
-                    if r is None:
-                        continue
-                        
-                    # Scatter plot
-                    if name != "Mid-caps":
-                        ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                                  color=colors[name], label=f"{name} data (n={r['n']})")
-                    else:
-                        ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                                  color="black", label=f"{name} data (n={r['n']})")
-                    
-                    # OLS fit line
-                    fit_x = np.linspace(*r["xlim"], 200)
-                    ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-                    ax.plot(fit_x, ols_fit_y, color=colors[name], lw=2, 
-                            label=f"{name} OLS (R^2={r['ols_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
-                    
-                    # Robust fit line (if enabled)
-                    if args.show_robust:
-                        robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-                        ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
-                                label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
-
-                ax.set_title(f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier ({start_year}-{end_year})" + 
-                            (f" ({index_filter} Only)" if index_filter else "") + 
-                            f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
-                ax.set_xlabel(x_axis_label)
-                y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
-                ax.set_ylabel(y_label)
-                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-                ax.grid(alpha=0.3)
-                plt.tight_layout()
+                fig = create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_label, args, 
+                                           index_filter, f"{start_year}-{end_year}")
                 
                 if args.save_plots:
                     filename_suffix = get_filename_suffix(analysis_mode_key, index_filter, args.use_log_price_change, args.log_x_axis)
@@ -605,43 +544,7 @@ else:
 
         # Create enhanced plot with both OLS and robust lines (skip if --no-plots)
         if not args.no_plots:
-            fig, ax = plt.subplots(figsize=(14, 10))
-            colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
-            
-            # Plot data points and regression lines
-            for name, r in results.items():
-                if r is None:
-                    continue
-                    
-                # Scatter plot
-                if name != "Mid-caps":
-                    ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                              color=colors[name], label=f"{name} data (n={r['n']})")
-                else:
-                    ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                              color="black", label=f"{name} data (n={r['n']})")
-                
-                # OLS fit line
-                fit_x = np.linspace(*r["xlim"], 200)
-                ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-                ax.plot(fit_x, ols_fit_y, color=colors[name], lw=2, 
-                        label=f"{name} OLS (R^2={r['ols_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
-                
-                # Robust fit line (if enabled)
-                if args.show_robust:
-                    robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-                    ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
-                            label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
-
-            ax.set_title(f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier" + 
-                        (f" ({index_filter} Only)" if index_filter else "") + 
-                        f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
-            ax.set_xlabel(x_axis_label)
-            y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
-            ax.set_ylabel(y_label)
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            ax.grid(alpha=0.3)
-            plt.tight_layout()
+            fig = create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter)
             
             if args.save_plots:
                 filename_suffix = get_filename_suffix(analysis_mode_key, index_filter, args.use_log_price_change, args.log_x_axis)
@@ -661,37 +564,8 @@ if args.single_panel and all_horizon_results and not args.no_plots and not args.
         ax = axs[row, col]
         results = all_horizon_results.get(horizon_label, {})
         
-        for name, r in results.items():
-            if r is None:
-                continue
-                
-            # Scatter plot
-            if name != "Mid-caps":
-                ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, 
-                          color=colors[name], label=f"{name} data")
-            else:
-                ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, 
-                          color="black", label=f"{name} data")
-            
-            # Regression lines
-            fit_x = np.linspace(*r["xlim"], 200)
-            ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-            ax.plot(fit_x, ols_fit_y, color=colors.get(name, "black"), lw=2, 
-                    label=f"{name} OLS (R^2={r['ols_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
-            
-            if args.show_robust:
-                robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-                ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), 
-                       lw=2, linestyle='--', label=f"{name} Robust")
-        
-        ax.set_title(f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier" + 
-                    (f" ({index_filter} Only)" if index_filter else ""))
         x_axis_label = ANALYSIS_MODES[analysis_mode_key]["x_label_template"].format(horizon=horizon_label)
-        ax.set_xlabel(x_axis_label)
-        y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
-        ax.set_ylabel(y_label)
-        ax.grid(alpha=0.3)
-        ax.legend(fontsize="x-small")
+        plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter)
     
     if args.save_plots:
         filename_suffix = get_filename_suffix(analysis_mode_key, index_filter, args.use_log_price_change, args.log_x_axis)
