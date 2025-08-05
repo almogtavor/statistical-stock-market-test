@@ -53,6 +53,8 @@ parser.add_argument("--show-robust", action="store_true", default=True,
                     help="Show robust regression lines alongside OLS")
 parser.add_argument("--save-plots", action="store_true",
                     help="Save plots to files instead of showing them")
+parser.add_argument("--no-plots", action="store_true",
+                    help="Skip all plotting and show only statistical results")
 parser.add_argument("--nasdaq100-only", action="store_true",
                     help="Restrict analysis to Nasdaq-100 (QQQ) tickers only")
 parser.add_argument("--dow30-only", action="store_true",
@@ -131,6 +133,10 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
         rss_robust = rss_ols
         r2_robust = r2_ols
     
+    # Calculate Pearson and Spearman correlation coefficients
+    pearson_corr, _ = stats.pearsonr(x_clipped, y_clipped)
+    spearman_corr, _ = stats.spearmanr(x_clipped, y_clipped)
+    
     return {
         "n": n,
         # OLS results
@@ -151,7 +157,12 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
         "xlim": (x_clip_min, x_clip_max),
         "ylim": (y_clip_min, y_clip_max),
         "x_clipped": x_clipped,
-        "y_clipped": y_clipped
+        "y_clipped": y_clipped,
+        # Correlation coefficients
+        "correlations": {
+            "pearson": pearson_corr,
+            "spearman": spearman_corr
+        }
     }
 
 
@@ -163,15 +174,17 @@ def format_results_table(results_dict, horizon_label):
     print(f"REGRESSION RESULTS FOR {horizon_label}")
     print(f"{'='*80}")
     
-    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value"]
-    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10}")
-    print("-" * 80)
-    
+    # Update the formatted results table to include correlation coefficients
+    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "Pearson Corr", "Spearman Corr"]
+    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<14} {headers[10]:<14}")
+    print("-" * 120)
+
     for name, r in results_dict.items():
         if r is None:
             continue
         print(f"{name:<12} {r['n']:<6} {r['ols_slope']:<10.4f} {r['ols_r2']:<8.3f} {r['ols_rss']:<12.1f} "
-              f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g}")
+              f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g} "
+              f"{r['correlations']['pearson']:<14.3f} {r['correlations']['spearman']:<14.3f}")
 
 
 # Store results for analysis
@@ -248,54 +261,55 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
         all_samples_results[horizon_label] = results["All Samples"]
     all_horizon_results[horizon_label] = results
 
-    # Create enhanced plot with both OLS and robust lines
-    fig, ax = plt.subplots(figsize=(14, 10))
-    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
-    
-    # Plot data points and regression lines
-    for name, r in results.items():
-        if r is None:
-            continue
+    # Create enhanced plot with both OLS and robust lines (skip if --no-plots)
+    if not args.no_plots:
+        fig, ax = plt.subplots(figsize=(14, 10))
+        colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+        
+        # Plot data points and regression lines
+        for name, r in results.items():
+            if r is None:
+                continue
+                
+            # Scatter plot
+            if name != "Mid-caps":
+                ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
+                          color=colors[name], label=f"{name} data (n={r['n']})")
+            else:
+                ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
+                          color="black", label=f"{name} data (n={r['n']})")
             
-        # Scatter plot
-        if name != "Mid-caps":
-            ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                      color=colors[name], label=f"{name} data (n={r['n']})")
+            # OLS fit line
+            fit_x = np.linspace(*r["xlim"], 200)
+            ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
+            ax.plot(fit_x, ols_fit_y, color=colors[name], lw=2, 
+                    label=f"{name} OLS (R^2={r['ols_r2']:.3f})")
+            
+            # Robust fit line (if enabled)
+            if args.show_robust:
+                robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
+                ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
+                        label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
+
+        ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier" + 
+                    (f" ({index_filter} Only)" if index_filter else "") + 
+                    f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
+        ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
+        ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(alpha=0.3)
+        plt.tight_layout()
+        
+        if args.save_plots:
+            filename_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
+            plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png", 
+                       dpi=300, bbox_inches='tight')
+            print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png")
         else:
-            ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                      color="black", label=f"{name} data (n={r['n']})")
-        
-        # OLS fit line
-        fit_x = np.linspace(*r["xlim"], 200)
-        ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-        ax.plot(fit_x, ols_fit_y, color=colors[name], lw=2, 
-                label=f"{name} OLS (R^2={r['ols_r2']:.3f})")
-        
-        # Robust fit line (if enabled)
-        if args.show_robust:
-            robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-            ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
-                    label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
+            plt.show()
 
-    ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier" + 
-                (f" ({index_filter} Only)" if index_filter else "") + 
-                f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
-    ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
-    ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    ax.grid(alpha=0.3)
-    plt.tight_layout()
-    
-    if args.save_plots:
-        filename_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
-        plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png", 
-                   dpi=300, bbox_inches='tight')
-        print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png")
-    else:
-        plt.show()
-
-# Optional: Combined panel showing all horizons
-if args.single_panel and all_horizon_results:
+# Optional: Combined panel showing all horizons (skip if --no-plots)
+if args.single_panel and all_horizon_results and not args.no_plots:
     fig, axs = plt.subplots(2, 2, figsize=(20, 16), constrained_layout=True)
     colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
     horizon_order = ["6M", "1Y", "2Y", "3Y"]

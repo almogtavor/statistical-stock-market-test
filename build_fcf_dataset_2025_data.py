@@ -21,8 +21,8 @@ import yfinance as yf
 ###############################################################################
 # -------------------------------- CONFIG ----------------------------------- #
 ###############################################################################
-MASTER_CSV           = "fcf_dataset.csv"
-PROGRESS_FILE        = "yahoo_fill_progress.txt"
+MASTER_CSV = "fcf_dataset.csv"
+PROGRESS_FILE = "yahoo_fill_progress.txt"
 PRICE_LOOKAHEAD_DAYS = 7
 SLEEP_BETWEEN_TICKER = 0.3
 MAX_YFIN_RETRY       = 3
