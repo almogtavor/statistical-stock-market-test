@@ -21,6 +21,13 @@ df_filtered = df[df['Ticker'].isin(tickers)]
 # Drop rows with NaN values for relevant columns
 df_filtered = df_filtered.dropna(subset=[y_val, x_val])
 
+# Use mean value for each ticker
+df_filtered = df_filtered.groupby("Ticker")[[x_val, y_val]].mean().reset_index()
+
+# Use yearly values
+# df_filtered['Year'] = pd.to_datetime(df['Report Date']).dt.year
+# df_yearly = df_filtered.groupby(['Ticker', 'Year'])[[x_val, y_val]].mean().reset_index()
+
 # Prepare regression data
 X = df_filtered[[x_val]].values.reshape(-1, 1)
 y = df_filtered[y_val].values.reshape(-1, 1)
