@@ -3,7 +3,7 @@
 Produce fcf_quarterly_merged.csv with:
 Ticker, Report Date, Price, 1Y_Price_growth, 2Y_Price_growth,
 3Y_Price_growth, 6M_Price_growth,
-Market_Cap,
+Market_Cap, EV, Volume,
 Revenue, Net Income,
 FCF, FCF_per_share,
 Yo6M_FCFps_growth, 1Y_FCFps_growth, 2Y_FCFps_growth, 3Y_FCFps_growth
@@ -50,14 +50,15 @@ def retry(func, *args, **kwargs):
 # ──────────────────────────────────────────────────────────────────────────────
 # 1) FUNDAMENTALS
 # ──────────────────────────────────────────────────────────────────────────────
-print("Loading cash-flow & income …")
+print("Loading cash-flow, income & balance …")
 sf.set_api_key(os.getenv("SIMFIN_API_KEY", "free"))
 sf.set_data_dir(str(DATA_DIR))
 
-cf = retry(sf.load_cashflow, variant="quarterly", market=MARKET, refresh_days=365)
-inc = retry(sf.load_income,   variant="quarterly", market=MARKET, refresh_days=365)
+cf  = retry(sf.load_cashflow,  variant="quarterly", market=MARKET, refresh_days=365)
+inc = retry(sf.load_income,    variant="quarterly", market=MARKET, refresh_days=365)
+bs  = retry(sf.load_balance,   variant="quarterly", market=MARKET, refresh_days=365)
 
-cf, inc = cf.reset_index(), inc.reset_index()
+cf, inc, bs = cf.reset_index(), inc.reset_index(), bs.reset_index()
 
 # choose a CapEx column
 capex_col = next((c for c in CAPEX_CANDS if c in cf.columns), None)
@@ -80,10 +81,38 @@ inc = inc[[
     "Net Income"
 ]]
 
+# ──────────────────────────────────────────────────────────────────────────────
+# include debt & cash for EV. For reference, bc.columns is:
+# ['Ticker', 'Report Date', 'SimFinId', 'Currency', 'Fiscal Year',
+#    'Fiscal Period', 'Publish Date', 'Restated Date', 'Shares (Basic)',
+#    'Shares (Diluted)', 'Cash, Cash Equivalents & Short Term Investments',
+#    'Accounts & Notes Receivable', 'Inventories', 'Total Current Assets',
+#    'Property, Plant & Equipment, Net',
+#    'Long Term Investments & Receivables', 'Other Long Term Assets',
+#    'Total Noncurrent Assets', 'Total Assets', 'Payables & Accruals',
+#    'Short Term Debt', 'Total Current Liabilities', 'Long Term Debt',
+#    'Total Noncurrent Liabilities', 'Total Liabilities',
+#    'Share Capital & Additional Paid-In Capital', 'Treasury Stock',
+#    'Retained Earnings', 'Total Equity', 'Total Liabilities & Equity']
+# ──────────────────────────────────────────────────────────────────────────────
+cash_col = "Cash, Cash Equivalents & Short Term Investments"
+std_col  = "Short Term Debt"
+ltd_col  = "Long Term Debt"
+
+# sum ST + LT debt into Total Debt
+bs["Total Debt"] = bs[std_col].fillna(0) + bs[ltd_col].fillna(0)
+
+# select & rename
+bs = (
+    bs[["Ticker", "Report Date", "Total Debt", cash_col]]
+      .rename(columns={cash_col: "Cash and Cash Equivalents"})
+)
 # merge & filter
 fund = (
-    cf.merge(inc, on=["Ticker", "Report Date"])
-      .loc[lambda d: d["Report Date"].dt.year >= START_YEAR]
+    cf
+    .merge(inc, on=["Ticker", "Report Date"])
+    .merge(bs,  on=["Ticker", "Report Date"])
+    .loc[lambda d: d["Report Date"].dt.year >= START_YEAR]
 )
 fund["FCF_per_share"] = fund["FCF"] / fund["Shares (Basic)"]
 
@@ -96,10 +125,10 @@ fund["FCFps_lag4"]  = grp["FCF_per_share"].shift(4)   # 1 Y
 fund["FCFps_lag8"]  = grp["FCF_per_share"].shift(8)   # 2 Y
 fund["FCFps_lag12"] = grp["FCF_per_share"].shift(12)  # 3 Y
 
-fund["Yo6M_FCFps_growth"] = (fund["FCF_per_share"] - fund["FCFps_lag2"])  / fund["FCFps_lag2"]
-fund["1Y_FCFps_growth"]  = (fund["FCF_per_share"] - fund["FCFps_lag4"])  / fund["FCFps_lag4"]
-fund["2Y_FCFps_growth"] = (fund["FCF_per_share"] - fund["FCFps_lag8"])  / fund["FCFps_lag8"]
-fund["3Y_FCFps_growth"] = (fund["FCF_per_share"] - fund["FCFps_lag12"]) / fund["FCFps_lag12"]
+fund["6M_FCFps_growth"] = (fund["FCF_per_share"] - fund["FCFps_lag2"])  / fund["FCFps_lag2"]
+fund["1Y_FCFps_growth"]    = (fund["FCF_per_share"] - fund["FCFps_lag4"])  / fund["FCFps_lag4"]
+fund["2Y_FCFps_growth"]    = (fund["FCF_per_share"] - fund["FCFps_lag8"])  / fund["FCFps_lag8"]
+fund["3Y_FCFps_growth"]    = (fund["FCF_per_share"] - fund["FCFps_lag12"]) / fund["FCFps_lag12"]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2) PRICES
@@ -107,13 +136,13 @@ fund["3Y_FCFps_growth"] = (fund["FCF_per_share"] - fund["FCFps_lag12"]) / fund["
 print("Loading daily share prices …")
 px = retry(sf.load_shareprices, variant="daily", market=MARKET, refresh_days=365)
 px = (
-    px.reset_index()[["Ticker", "Date", "Adj. Close"]]
+    px.reset_index()[["Ticker", "Date", "Adj. Close", "Volume"]]
       .rename(columns={"Date": "TradeDate", "Adj. Close": "Price"})
       .assign(TradeDate=lambda d: pd.to_datetime(d["TradeDate"]))
       .sort_values(["Ticker", "TradeDate"])
 )
 
-# align prices to report dates (within +7 days)
+# align prices (and volume) to report dates (within +7 days)
 fund_keyed = fund[["Ticker", "Report Date"]].rename(columns={"Report Date": "RptDate"})
 print("Aligning prices within +-7 days")
 temp = (
@@ -138,8 +167,9 @@ merged.dropna(subset=["Price"], inplace=True)
 # ──────────────────────────────────────────────────────────────────────────────
 # 3) METRICS & SAVE
 # ──────────────────────────────────────────────────────────────────────────────
-print("Computing market cap & price growths …")
+print("Computing market cap, EV & price growths …")
 merged["Market_Cap"] = merged["Price"] * merged["Shares (Basic)"]
+merged["EV"]         = merged["Market_Cap"] + merged["Total Debt"] - merged["Cash and Cash Equivalents"]
 
 grp2 = merged.groupby("Ticker")
 merged["Price_lag2"]  = grp2["Price"].shift(2)
@@ -147,21 +177,33 @@ merged["Price_lag4"]  = grp2["Price"].shift(4)
 merged["Price_lag8"]  = grp2["Price"].shift(8)
 merged["Price_lag12"] = grp2["Price"].shift(12)
 
-merged["6M_Price_growth"] = (merged["Price"] - merged["Price_lag2"])  / merged["Price_lag2"]
+merged["6M_Price_growth"]  = (merged["Price"] - merged["Price_lag2"])  / merged["Price_lag2"]
 merged["1Y_Price_growth"]  = (merged["Price"] - merged["Price_lag4"])  / merged["Price_lag4"]
-merged["2Y_Price_growth"] = (merged["Price"] - merged["Price_lag8"])  / merged["Price_lag8"]
-merged["3Y_Price_growth"] = (merged["Price"] - merged["Price_lag12"]) / merged["Price_lag12"]
+merged["2Y_Price_growth"]  = (merged["Price"] - merged["Price_lag8"])  / merged["Price_lag8"]
+merged["3Y_Price_growth"]  = (merged["Price"] - merged["Price_lag12"]) / merged["Price_lag12"]
 
+# Net Income growth at the same horizons
+merged["NI_lag2"]   = grp2["Net Income"].shift(2)
+merged["NI_lag4"]   = grp2["Net Income"].shift(4)
+merged["NI_lag8"]   = grp2["Net Income"].shift(8)
+merged["NI_lag12"]  = grp2["Net Income"].shift(12)
+
+merged["6M_NetIncome_growth"]   = (merged["Net Income"] - merged["NI_lag2"])  / merged["NI_lag2"]
+merged["1Y_NetIncome_growth"]   = (merged["Net Income"] - merged["NI_lag4"])  / merged["NI_lag4"]
+merged["2Y_NetIncome_growth"]   = (merged["Net Income"] - merged["NI_lag8"])  / merged["NI_lag8"]
+merged["3Y_NetIncome_growth"]   = (merged["Net Income"] - merged["NI_lag12"]) / merged["NI_lag12"]
 # select & order columns
 final = merged[[
     "Ticker", "Report Date",
-    "Price", "6M_Price_growth", "1Y_Price_growth",
+    "Price", "Volume", "Market_Cap", "EV",
+    "6M_Price_growth", "1Y_Price_growth",
     "2Y_Price_growth", "3Y_Price_growth",
-    "Market_Cap",
     "Revenue", "Net Income",
     "FCF", "FCF_per_share",
-    "Yo6M_FCFps_growth", "1Y_FCFps_growth",
-    "2Y_FCFps_growth", "3Y_FCFps_growth"
+    "6M_FCFps_growth", "1Y_FCFps_growth",
+    "2Y_FCFps_growth", "3Y_FCFps_growth",
+    "6M_NetIncome_growth", "1Y_NetIncome_growth",
+    "2Y_NetIncome_growth", "3Y_NetIncome_growth"
 ]]
 
 print(f"Rows: {len(final):,}")

@@ -11,12 +11,14 @@ import os
 import sys
 import time
 import warnings
+import threading
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import concurrent.futures
 
 ###############################################################################
 # -------------------------------- CONFIG ----------------------------------- #
@@ -25,10 +27,13 @@ MASTER_CSV = "fcf_dataset.csv"
 PROGRESS_FILE = "yahoo_fill_progress.txt"
 PRICE_LOOKAHEAD_DAYS = 7
 SLEEP_BETWEEN_TICKER = 0.3
-MAX_YFIN_RETRY       = 3
+MAX_YFIN_RETRY = 3
+NUM_THREADS = 1
 
 pd.options.mode.chained_assignment = None
 warnings.simplefilter("ignore", category=FutureWarning)
+
+_lock = threading.Lock()
 
 ###############################################################################
 # ----------------------------- I/O HELPERS --------------------------------- #
@@ -36,7 +41,15 @@ warnings.simplefilter("ignore", category=FutureWarning)
 def safe_write_csv(df: pd.DataFrame, path: str) -> None:
     tmp = f"{path}.tmp"
     df.to_csv(tmp, index=False, float_format="%.3f")
-    os.replace(tmp, path)
+    # Retry replacing on Windows PermissionError
+    for attempt in range(3):
+        try:
+            os.replace(tmp, path)
+            break
+        except PermissionError:
+            if attempt == 2:
+                raise
+            time.sleep(0.1)
 
 def read_master() -> pd.DataFrame:
     if not os.path.exists(MASTER_CSV):
@@ -94,7 +107,6 @@ def get_quarterly_income(tkr: str) -> Optional[pd.DataFrame]:
     inc = yf.Ticker(tkr).quarterly_income_stmt.T
     if inc.empty:
         return None
-    # harmonise column names
     rev_col = next((c for c in ["Total Revenue", "Revenue"] if c in inc.columns), None)
     ni_col  = "Net Income" if "Net Income" in inc.columns else None
     if not rev_col or not ni_col:
@@ -103,22 +115,30 @@ def get_quarterly_income(tkr: str) -> Optional[pd.DataFrame]:
     inc.index.name = "Report Date"
     return inc
 
-def nearest_price(yft: yf.Ticker, rpt_dates: pd.Index) -> pd.Series:
+def nearest_price(yft: yf.Ticker, rpt_dates: pd.Index) -> pd.DataFrame:
     start = (rpt_dates.min() - timedelta(days=1)).strftime("%Y-%m-%d")
     end   = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
     hist  = yfin_retry(yft.history, start=start, end=end, interval="1d")
     if isinstance(hist, tuple):
         hist = hist[0]
     if hist.empty:
-        return pd.Series(index=rpt_dates, dtype="float64")
+        return pd.DataFrame({"Price": [np.nan]*len(rpt_dates),
+                             "Volume": [np.nan]*len(rpt_dates)},
+                             index=rpt_dates)
 
     hist.index = pd.to_datetime(hist.index).tz_localize(None)
-    close_for = []
+    prices = []
+    volumes = []
     for d in rpt_dates:
         mask = (hist.index >= d) & (hist.index <= d + timedelta(days=PRICE_LOOKAHEAD_DAYS))
-        sub  = hist.loc[mask]
-        close_for.append(sub["Close"].iloc[0] if not sub.empty else np.nan)
-    return pd.Series(close_for, index=rpt_dates)
+        sub = hist.loc[mask]
+        if not sub.empty:
+            prices.append(sub["Close"].iloc[0])
+            volumes.append(sub["Volume"].iloc[0])
+        else:
+            prices.append(np.nan)
+            volumes.append(np.nan)
+    return pd.DataFrame({"Price": prices, "Volume": volumes}, index=rpt_dates)
 
 ###############################################################################
 # ---------------------- COMPUTE A SINGLE TICKER FRAME ---------------------- #
@@ -135,9 +155,10 @@ def build_one_ticker(tkr: str) -> Optional[pd.DataFrame]:
         print(f"⚠️  {tkr:5}: no overlapping CF/INC dates")
         return None
 
-    yft     = yf.Ticker(tkr)
-    prices  = nearest_price(yft, df.index)
-    df["Price"] = prices
+    yft = yf.Ticker(tkr)
+    price_vol_df = nearest_price(yft, df.index)
+    df["Price"]  = price_vol_df["Price"]
+    df["Volume"] = price_vol_df["Volume"]
     df.dropna(subset=["Price"], inplace=True)
     if df.empty:
         print(f"⚠️  {tkr:5}: no matching prices")
@@ -145,12 +166,16 @@ def build_one_ticker(tkr: str) -> Optional[pd.DataFrame]:
 
     df["FCF_per_share"] = df["FCF"] / df["Shares"]
     df["Market_Cap"]    = df["Price"] * df["Shares"]
-    df.sort_index(inplace=True)
+    info = yft.get_info()
+    total_debt = info.get("totalDebt", np.nan)
+    cash       = info.get("totalCash", np.nan)
+    df["EV"] = df["Market_Cap"] + total_debt - cash
 
+    df.sort_index(inplace=True)
     df.reset_index(inplace=True)
     df.insert(0, "Ticker", tkr)
 
-    cols = ["Ticker", "Report Date", "Price", "Market_Cap",
+    cols = ["Ticker", "Report Date", "Price", "Volume", "Market_Cap", "EV",
             "Revenue", "Net Income",
             "FCF", "FCF_per_share"]
     return df[cols]
@@ -162,17 +187,20 @@ def recompute_growth_for_ticker(df: pd.DataFrame) -> pd.DataFrame:
     """df – rows of one ticker only, sorted by Report Date."""
     df = df.sort_values("Report Date").copy()
 
-    # price growth
-    df["6M_Price_growth"] = df["Price"].pct_change(2)
-    df["1Y_Price_growth"]  = df["Price"].pct_change(4)
-    df["2Y_Price_growth"] = df["Price"].pct_change(8)
-    df["3Y_Price_growth"] = df["Price"].pct_change(12)
+    df["6M_Price_growth"]     = df["Price"].pct_change(2)
+    df["1Y_Price_growth"]     = df["Price"].pct_change(4)
+    df["2Y_Price_growth"]     = df["Price"].pct_change(8)
+    df["3Y_Price_growth"]     = df["Price"].pct_change(12)
 
-    # FCF/share growth
-    df["Yo6M_FCFps_growth"] = df["FCF_per_share"].pct_change(2)
-    df["1Y_FCFps_growth"]  = df["FCF_per_share"].pct_change(4)
-    df["2Y_FCFps_growth"] = df["FCF_per_share"].pct_change(8)
-    df["3Y_FCFps_growth"] = df["FCF_per_share"].pct_change(12)
+    df["6M_FCFps_growth"]     = df["FCF_per_share"].pct_change(2)
+    df["1Y_FCFps_growth"]     = df["FCF_per_share"].pct_change(4)
+    df["2Y_FCFps_growth"]     = df["FCF_per_share"].pct_change(8)
+    df["3Y_FCFps_growth"]     = df["FCF_per_share"].pct_change(12)
+
+    df["6M_NetIncome_growth"] = df["Net Income"].pct_change(2)
+    df["1Y_NetIncome_growth"] = df["Net Income"].pct_change(4)
+    df["2Y_NetIncome_growth"] = df["Net Income"].pct_change(8)
+    df["3Y_NetIncome_growth"] = df["Net Income"].pct_change(12)
 
     return df
 
@@ -194,46 +222,51 @@ def main() -> None:
     if not tickers:
         print("Nothing to do - every ticker already processed.")
         return
-    print(f"Tickers left: {len(tickers)}")
+    total = len(tickers)
+    processed_count = 0
+    print(f"Tickers left: {total}")
 
-    for i, tkr in enumerate(tickers, 1):
-        print(f"[{i}/{len(tickers)}] {tkr}")
-        try:
-            new_df = build_one_ticker(tkr)
-            if new_df is None:
-                save_progress(tkr)
-                continue
+    def process_ticker(tkr: str):
+        return tkr, build_one_ticker(tkr)
 
-            # Existing rows for this ticker
-            current = master[master["Ticker"] == tkr]
-            last_date = current["Report Date"].max() if not current.empty else None
+    with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
+        future_to_tkr = {executor.submit(process_ticker, t): t for t in tickers}
 
-            # Keep only truly new quarters
-            mask = (new_df["Report Date"] > last_date) if pd.notna(last_date) else slice(None)
-            delta = new_df.loc[mask]
+        for future in concurrent.futures.as_completed(future_to_tkr):
+            tkr = future_to_tkr[future]
+            try:
+                tkr, new_df = future.result()
+                with _lock:
+                    processed_count += 1
+                    if new_df is None:
+                        save_progress(tkr)
+                        print(f"[{processed_count}/{total}] {tkr} skipped")
+                    else:
+                        current = master[master["Ticker"] == tkr]
+                        last_date = current["Report Date"].max() if not current.empty else None
 
-            if delta.empty:
-                print("   already up-to-date")
-            else:
-                master = pd.concat([master, delta], ignore_index=True)
+                        mask = (new_df["Report Date"] > last_date) if pd.notna(last_date) else slice(None)
+                        delta = new_df.loc[mask]
 
-            # Recompute growth metrics for this ticker (even if delta empty)
-            idx = master["Ticker"] == tkr
-            recomputed = recompute_growth_for_ticker(master.loc[idx])
-            master.loc[idx, recomputed.columns] = recomputed
+                        if not delta.empty:
+                            master = pd.concat([master, delta], ignore_index=True)
 
-            # Sort and persist
-            master.sort_values(["Ticker", "Report Date"], inplace=True)
-            safe_write_csv(master, MASTER_CSV)
-            print(f"   data rows: {len(recomputed)} (ticker total)")
+                        idx = master["Ticker"] == tkr
+                        recomputed = recompute_growth_for_ticker(master.loc[idx])
+                        master.loc[idx, recomputed.columns] = recomputed
 
-            save_progress(tkr)
-        except KeyboardInterrupt:
-            print("Interrupted by user - progress saved.")
-            sys.exit(0)
-        except Exception as ex:
-            print(f"⚠️  {tkr:5}: {ex}")
-        time.sleep(SLEEP_BETWEEN_TICKER)
+                        master.sort_values(["Ticker", "Report Date"], inplace=True)
+                        safe_write_csv(master, MASTER_CSV)
+                        save_progress(tkr)
+                        print(f"[{processed_count}/{total}] {tkr} processed ({len(recomputed)} rows)")
+
+                time.sleep(SLEEP_BETWEEN_TICKER)
+
+            except KeyboardInterrupt:
+                print("Interrupted by user – progress saved.")
+                sys.exit(0)
+            except Exception as ex:
+                print(f"⚠️  {tkr}: {ex}")
 
     print("\n✅ All done!")
 

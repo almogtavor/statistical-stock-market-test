@@ -40,8 +40,33 @@ HORIZONS = {
     "3Y": ("3Y_FCFps_growth", "3Y_Price_growth"),
 }
 
+# FCF Yield horizons (using FCF yield instead of growth)
+YIELD_HORIZONS = {
+    "6M": ("FCF_yield", "6M_Price_growth"),
+    "1Y": ("FCF_yield", "1Y_Price_growth"),
+    "2Y": ("FCF_yield", "2Y_Price_growth"),
+    "3Y": ("FCF_yield", "3Y_Price_growth"),
+}
+
+# Net Income Growth horizons (using Net Income growth rates)
+NET_INCOME_HORIZONS = {
+    "6M": ("6M_NetIncome_growth", "6M_Price_growth"),
+    "1Y": ("1Y_NetIncome_growth", "1Y_Price_growth"),
+    "2Y": ("2Y_NetIncome_growth", "2Y_Price_growth"),
+    "3Y": ("3Y_NetIncome_growth", "3Y_Price_growth"),
+}
+
 # Load data
 df_full = pd.read_csv(CSV, parse_dates=["Report Date"])
+
+# Calculate Net Income growth rates for different horizons
+# Using pct_change with periods that align with the price growth horizons
+# Sort by Ticker and Report Date to ensure proper time series ordering
+df_full = df_full.sort_values(['Ticker', 'Report Date'])
+df_full["6M_NetIncome_growth"] = df_full.groupby('Ticker')["Net Income"].pct_change(2)  # 2 quarters = 6 months
+df_full["1Y_NetIncome_growth"] = df_full.groupby('Ticker')["Net Income"].pct_change(4)   # 4 quarters = 1 year
+df_full["2Y_NetIncome_growth"] = df_full.groupby('Ticker')["Net Income"].pct_change(8)   # 8 quarters = 2 years
+df_full["3Y_NetIncome_growth"] = df_full.groupby('Ticker')["Net Income"].pct_change(12)  # 12 quarters = 3 years
 
 # ---------------------------------------------------------------------
 # CLI
@@ -61,7 +86,24 @@ parser.add_argument("--dow30-only", action="store_true",
                     help="Restrict analysis to Dow Jones 30 tickers only")
 parser.add_argument("--sp500-only", action="store_true",
                     help="Restrict analysis to S&P 500 tickers only")
+parser.add_argument("--use-fcf-yield", action="store_true",
+                    help="Use FCF Yield (FCF/EV) instead of FCF growth rates")
+parser.add_argument("--use-net-income-growth", action="store_true",
+                    help="Use Net Income Growth rates instead of FCF growth rates")
 args = parser.parse_args()
+
+# Calculate FCF Yield if using yield mode
+if args.use_fcf_yield:
+    # Calculate FCF Yield as FCF / Market_Cap (expressed as percentage)
+    # Using Market Cap as proxy for EV since EV data is not available
+    df_full["FCF_yield"] = (df_full["FCF"] / df_full["Market_Cap"]) * 100
+
+# Calculate Net Income Growth rates if using net income growth mode
+if args.use_net_income_growth:
+    # Net income growth rates are already calculated above after loading the data
+    # They represent the percentage change in net income over the corresponding time periods
+    # This should provide better correlation with price changes as both are growth metrics
+    pass  # Growth rates already calculated above
 
 # -----------------------------------------------------------------------------
 # Enhanced helper to clip & regress & report with R^2 and RSS
@@ -191,9 +233,20 @@ def format_results_table(results_dict, horizon_label):
 all_samples_results = {}
 all_horizon_results = {}
 
+# Choose horizons based on mode
+if args.use_fcf_yield:
+    horizons_to_use = YIELD_HORIZONS
+    analysis_mode = "FCF Yield"
+elif args.use_net_income_growth:
+    horizons_to_use = NET_INCOME_HORIZONS
+    analysis_mode = "Net Income Growth"
+else:
+    horizons_to_use = HORIZONS
+    analysis_mode = "FCF Growth"
+
 # Run separately for each horizon
-for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
-    print(f"\n\nProcessing {horizon_label} horizon...")
+for horizon_label, (fcfps_col, price_col) in horizons_to_use.items():
+    print(f"\n\nProcessing {horizon_label} horizon ({analysis_mode} mode)...")
     
     # We need the growth columns plus Market_Cap
     df = df_full[["Ticker", "Market_Cap", fcfps_col, price_col]].dropna()
@@ -213,11 +266,25 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
     if index_filter:
         print(f"Filtering to {index_filter} tickers only ({len(df)} observations)")
 
-    # Convert to % points
-    fcf_pct_col = f"{horizon_label}_FCF_pct"
-    price_pct_col = f"{horizon_label}_Price_pct"
-    df[fcf_pct_col] = df[fcfps_col] * 100
-    df[price_pct_col] = df[price_col] * 100
+    # Convert to % points and set up column names
+    if args.use_fcf_yield:
+        fcf_pct_col = f"{horizon_label}_FCF_yield_pct"
+        price_pct_col = f"{horizon_label}_Price_pct"
+        df[fcf_pct_col] = df[fcfps_col]  # FCF yield is already in percentage
+        df[price_pct_col] = df[price_col] * 100
+        x_axis_label = f"{horizon_label} FCF Yield (%)"
+    elif args.use_net_income_growth:
+        fcf_pct_col = f"{horizon_label}_Net_Income_growth_pct"
+        price_pct_col = f"{horizon_label}_Price_pct"
+        df[fcf_pct_col] = df[fcfps_col] * 100  # Convert to percentage points
+        df[price_pct_col] = df[price_col] * 100
+        x_axis_label = f"{horizon_label} Net Income Growth (%)"
+    else:
+        fcf_pct_col = f"{horizon_label}_FCF_pct"
+        price_pct_col = f"{horizon_label}_Price_pct"
+        df[fcf_pct_col] = df[fcfps_col] * 100
+        df[price_pct_col] = df[price_col] * 100
+        x_axis_label = f"{horizon_label} FCFps Growth (%)"
 
     # -----------------------------------------------------------------------------
     # Define cap tiers
@@ -291,10 +358,10 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
                 ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
                         label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
 
-        ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier" + 
+        ax.set_title(f"{horizon_label} Price Change vs {analysis_mode} by Market Cap Tier" + 
                     (f" ({index_filter} Only)" if index_filter else "") + 
                     f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)")
-        ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
+        ax.set_xlabel(x_axis_label)
         ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(alpha=0.3)
@@ -302,9 +369,15 @@ for horizon_label, (fcfps_col, price_col) in HORIZONS.items():
         
         if args.save_plots:
             filename_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
-            plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png", 
+            if args.use_fcf_yield:
+                mode_suffix = "_yield"
+            elif args.use_net_income_growth:
+                mode_suffix = "_netincome_growth"
+            else:
+                mode_suffix = ""
+            plt.savefig(f"{horizon_label.lower()}_market_cap_robust_regression{mode_suffix}{filename_suffix}.png", 
                        dpi=300, bbox_inches='tight')
-            print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{filename_suffix}.png")
+            print(f"Saved plot: {horizon_label.lower()}_market_cap_robust_regression{mode_suffix}{filename_suffix}.png")
         else:
             plt.show()
 
@@ -342,29 +415,40 @@ if args.single_panel and all_horizon_results and not args.no_plots:
                 ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), 
                        lw=2, linestyle='--', label=f"{name} Robust")
         
-        ax.set_title(f"{horizon_label} Price Change vs FCF Growth by Market Cap Tier" + 
+        ax.set_title(f"{horizon_label} Price Change vs {analysis_mode} by Market Cap Tier" + 
                     (f" ({index_filter} Only)" if index_filter else ""))
-        ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
+        if args.use_fcf_yield:
+            ax.set_xlabel(f"{horizon_label} FCF Yield (%)")
+        elif args.use_net_income_growth:
+            ax.set_xlabel(f"{horizon_label} Net Income Growth (%)")
+        else:
+            ax.set_xlabel(f"{horizon_label} FCFps Growth (%)")
         ax.set_ylabel(f"{horizon_label} Forward Price Change (%)")
         ax.grid(alpha=0.3)
         ax.legend(fontsize="x-small")
     
     if args.save_plots:
         filename_suffix = f"_{index_filter.lower().replace(' ', '_').replace('-', '_')}" if index_filter else ""
-        plt.savefig(f"all_horizons_market_cap_robust_regression{filename_suffix}.png", 
+        if args.use_fcf_yield:
+            mode_suffix = "_yield"
+        elif args.use_net_income_growth:
+            mode_suffix = "_netincome_growth"
+        else:
+            mode_suffix = ""
+        plt.savefig(f"all_horizons_market_cap_robust_regression{mode_suffix}{filename_suffix}.png", 
                    dpi=300, bbox_inches='tight')
-        print(f"Saved combined plot: all_horizons_market_cap_robust_regression{filename_suffix}.png")
+        print(f"Saved combined plot: all_horizons_market_cap_robust_regression{mode_suffix}{filename_suffix}.png")
     else:
         plt.show()
 
 # Summary statistics across all horizons
 print(f"\n{'='*80}")
-print("SUMMARY: R^2 COMPARISON ACROSS HORIZONS")
+print(f"SUMMARY: R^2 COMPARISON ACROSS HORIZONS ({analysis_mode})")
 print(f"{'='*80}")
 print(f"{'Horizon':<10} {'All Samples OLS R^2':<20} {'All Samples Robust R^2':<22} {'Mega-caps OLS R^2':<18} {'Micro-caps OLS R^2':<18}")
 print("-" * 80)
 
-for horizon_label in HORIZONS.keys():
+for horizon_label in horizons_to_use.keys():
     results = all_horizon_results.get(horizon_label, {})
     all_ols_r2 = results.get("All Samples", {}).get("ols_r2", 0)
     all_robust_r2 = results.get("All Samples", {}).get("robust_r2", 0)
