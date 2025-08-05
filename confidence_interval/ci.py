@@ -166,6 +166,14 @@ def main():
     plt.figtext(0.02, 0.02, f"Note: Error bars show 95% confidence intervals. Sample sizes vary by tier.", 
                 fontsize=10, style='italic')
     
+    # Save plot
+    filename = f"confidence_intervals_{args.analysis_mode.lower()}"
+    if index_filter:
+        filename += f"_{index_filter.lower().replace(' ', '_').replace('&', 'and')}"
+    filename += ".png"
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    print(f"Saved plot: {filename}")
+    
     plt.show()
 
     # Print summary statistics
