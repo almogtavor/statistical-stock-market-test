@@ -381,7 +381,12 @@ if args.by_year_windows:
 def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter=None, year_range=None):
     """Create a regression plot with scatter points and fit lines"""
     fig, ax = plt.subplots(figsize=(14, 10))
-    colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
+    
+    # Use black color for index-specific analysis, otherwise use tier-specific colors
+    if index_filter:
+        colors = {"All Samples": "black"}
+    else:
+        colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
     
     for name, r in results.items():
         if not r:
@@ -430,7 +435,12 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
 
 def plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter):
     """Plot regression data on a single subplot axis"""
-    colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
+    
+    # Use black color for index-specific analysis, otherwise use tier-specific colors
+    if index_filter:
+        colors = {"All Samples": "black", "Mega-caps": "black", "Mid-caps": "black", "Micro-caps": "black"}
+    else:
+        colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
     
     for name, r in results.items():
         if not r:
@@ -452,7 +462,7 @@ def plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_l
         fit_x = np.linspace(*r["xlim"], 100)
         ls_fit_y = r["ls_intercept"] + r["ls_slope"] * fit_x
         ax.plot(fit_x, ls_fit_y, color=color, lw=2, 
-               label=f"{name} LS (b_LS={r['ls_slope']:.3f}, R^2={r['ls_r2']:.3f})")
+               label=f"{name} LS (b_LS={r['ls_slope']:.3f}, R²={r['ls_r2']:.3f})")
         
         # Robust fit line (if enabled)
         if args.show_robust:
@@ -619,7 +629,12 @@ else:
 # Optional: Combined panel showing all horizons (skip if --no-plots and not in year windows mode)
 if args.single_panel and all_horizon_results and not args.no_plots and not args.by_year_windows:
     fig, axs = plt.subplots(2, 2, figsize=(20, 16), constrained_layout=True)
-    colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
+    
+    # Use black color for index-specific analysis, otherwise use tier-specific colors
+    if index_filter:
+        colors = {"All Samples": "black", "Mega-caps": "black", "Mid-caps": "black", "Micro-caps": "black"}
+    else:
+        colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
     
     for i, horizon_label in enumerate(HORIZONS):
         row, col = divmod(i, 2)
