@@ -55,7 +55,6 @@ def calculate_non_overlapping_net_income_growth(df):
     # Remove existing columns if they exist
     existing_cols = [col for col in df.columns if 'NetIncome_growth' in col]
     if existing_cols:
-        print(f"Removing existing NetIncome growth columns: {existing_cols}")
         df = df.drop(columns=existing_cols)
     
     df["Quarter"] = df["Report Date"].dt.quarter
@@ -185,10 +184,18 @@ if args.use_fcf_yield:
 # -----------------------------------------------------------------------------
 # Enhanced helper to clip & regress & report with R^2 and RSS
 # -----------------------------------------------------------------------------
-def enhanced_regression_analysis(x, y, p_low=0.2, p_high=99.8):
+def enhanced_regression_analysis(x, y, p_low=2.0, p_high=98.0):
     """
     Perform both OLS and robust regression with comprehensive metrics
     """
+    # Filter out infinite and NaN values first
+    finite_mask = np.isfinite(x) & np.isfinite(y)
+    x = x[finite_mask]
+    y = y[finite_mask]
+    
+    if len(x) < 5:
+        return None
+    
     # Clip outliers
 
     res = regression_analysis(x,y)
@@ -256,10 +263,7 @@ def enhanced_regression_analysis(x, y, p_low=0.2, p_high=99.8):
         robust_intercept = ols_intercept
         rss_robust = rss_ols
         r2_robust = r2_ols
-    
-    # Calculate Pearson and Spearman correlation coefficients
     pearson_corr, _ = stats.pearsonr(x_clipped, y_clipped)
-    spearman_corr, _ = stats.spearmanr(x_clipped, y_clipped)
     
     return {
         "n": n,
@@ -285,7 +289,6 @@ def enhanced_regression_analysis(x, y, p_low=0.2, p_high=99.8):
         # Correlation coefficients
         "correlations": {
             "pearson": pearson_corr,
-            "spearman": spearman_corr
         }
     }
 
@@ -294,15 +297,15 @@ def format_results_table(results_dict, horizon_label):
     """Print a nicely formatted table of results"""
     print(f"\n{'='*80}\nREGRESSION RESULTS FOR {horizon_label}\n{'='*80}")
     
-    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "Pearson Corr", "Spearman Corr"]
-    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<14} {headers[10]:<14}")
+    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "Pearson Corr"]
+    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<14}")
     print("-" * 120)
 
     for name, r in results_dict.items():
         if r:
             print(f"{name:<12} {r['n']:<6} {r['ols_slope']:<10.4f} {r['ols_r2']:<8.3f} {r['ols_rss']:<12.1f} "
                   f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g} "
-                  f"{r['correlations']['pearson']:<14.3f} {r['correlations']['spearman']:<14.3f}")
+                  f"{r['correlations']['pearson']:<14.3f}")
 
 
 # Store results for analysis
@@ -358,19 +361,19 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
             continue
             
         # Scatter plot - Mid-caps use black color like All Samples for visibility
-        color = "black" if name == "Mid-caps" else colors[name]
+        color = "black" if name == "Mid-caps" else colors.get(name, "black")
         ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
                   color=color, label=f"{name} data (n={r['n']})")
         
         # Regression lines
         fit_x = np.linspace(*r["xlim"], 200)
         ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-        ax.plot(fit_x, ols_fit_y, color=colors[name], lw=2, 
+        ax.plot(fit_x, ols_fit_y, color=colors.get(name, "black"), lw=2, 
                 label=f"{name} OLS (R^2={r['ols_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
         
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-            ax.plot(fit_x, robust_fit_y, color=colors[name], lw=2, linestyle='--',
+            ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), lw=2, linestyle='--',
                     label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
 
     # Set labels and title
@@ -476,13 +479,17 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
                                            p_high=P_LOWEST_CAP_CLIPPING_HIGH)
         elif name == "Mega-caps" or name == "Mid-caps":
             r = enhanced_regression_analysis(x_vals, y_vals,
-                                            p_low=0.9, 
-                                            p_high=99.1)
+                                            p_low=2.0, 
+                                            p_high=98.0)
         else:
-            r = enhanced_regression_analysis(x_vals, y_vals)
+            r = enhanced_regression_analysis(x_vals, y_vals,
+                                            p_low=2.0, 
+                                            p_high=98.0)
 
         if r:
             results[name] = r
+        else:
+            print(f"  Failed to process {name} - regression analysis returned None")
 
     return results, x_axis_label, df_filtered
 
@@ -501,9 +508,7 @@ if args.by_year_windows:
         ].copy()
         
         # Run analysis for the single timeframe on this year window
-        for horizon_label in horizons_to_analyze:
-            print(f"\nProcessing {horizon_label} horizon for {start_year}-{end_year} ({analysis_mode_name} mode)...")
-            
+        for horizon_label in horizons_to_analyze:            
             # Use the new generic analysis function
             results, x_axis_label, df_filtered = analyze_horizon_data(
                 df_window, horizon_label, analysis_mode_key, index_tickers, index_filter, args.use_log_price_change, args.log_x_axis
@@ -529,9 +534,7 @@ if args.by_year_windows:
                     plt.show()
 else:
     # Regular mode - analyze all horizons normally
-    for horizon_label in horizons_to_analyze:
-        print(f"\n\nProcessing {horizon_label} horizon ({analysis_mode_name} mode)...")
-        
+    for horizon_label in horizons_to_analyze:        
         # Use the new generic analysis function
         results, x_axis_label, df_filtered = analyze_horizon_data(
             df_full, horizon_label, analysis_mode_key, index_tickers, index_filter, args.use_log_price_change, args.log_x_axis
