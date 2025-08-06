@@ -4,7 +4,7 @@
 Linear Regression analysis that splits into cap tiers (top10%, mid80%, bottom10%, all)
 Price change vs FCFps change or Revenue change analysis for each segment, including:
 - LS regression with R^2, RSS
-- Robust regression (Huber regression)
+- Resistance line (robust regression using terciles)
 - Comprehensive statistical metrics
 """
 
@@ -154,7 +154,7 @@ def get_filename_suffix(analysis_mode, index_filter, use_log_price_change=False,
 # CLI
 parser = argparse.ArgumentParser()
 parser.add_argument("--single-panel", action="store_true", help="Overlay all horizons' All Samples results on one panel")
-parser.add_argument("--show-robust", action="store_true", default=True, help="Show robust regression lines alongside LS")
+parser.add_argument("--show-robust", action="store_true", default=True, help="Show resistance line alongside LS")
 parser.add_argument("--save-plots", action="store_true", help="Save plots to files instead of showing them")
 parser.add_argument("--no-plots", action="store_true", help="Skip all plotting and show only statistical results")
 parser.add_argument("--nasdaq100-only", action="store_true", help="Restrict analysis to Nasdaq-100 tickers only")
@@ -238,24 +238,51 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
     ci = (ls_slope - t_crit * SE, ls_slope + t_crit * SE) if SE > 0 else (ls_slope, ls_slope)
     reject_H0 = abs(t_stat) > t_crit if SE > 0 else False
     
-    # Robust Regression (Huber)
+    # Resistance Line (Robust Regression using terciles)
     try:
-        huber = HuberRegressor(epsilon=1.35, max_iter=1000, alpha=0.0001)
-        huber.fit(X, y_clipped)
-        robust_slope = huber.coef_[0]
-        robust_intercept = huber.intercept_
+        # Sort data by X values to find terciles
+        sorted_indices = np.argsort(x_clipped)
+        n = len(x_clipped)
         
-        # Robust predictions and metrics
-        y_pred_robust = robust_intercept + robust_slope * x_clipped
-        residuals_robust = y_clipped - y_pred_robust
-        rss_robust = np.sum(residuals_robust ** 2)
+        # Divide into thirds (terciles)
+        tercile_size = n // 3
         
-        # Calculate R² using the mathematical formula: r²xy = 1 - (RSS/TSS)
-        # TSS is already calculated above as: sum((Yi - Ybar)²)
-        r2_robust = 1 - (rss_robust / tss) if tss > 0 else 0
+        # Lower tercile (bottom 1/3)
+        lower_indices = sorted_indices[:tercile_size]
+        X_L = np.median(x_clipped[lower_indices])  # Median of X in lower tercile
+        Y_L = np.median(y_clipped[lower_indices])  # Median of Y in lower tercile
+        
+        # Upper tercile (top 1/3)
+        upper_indices = sorted_indices[-tercile_size:]
+        X_H = np.median(x_clipped[upper_indices])  # Median of X in upper tercile
+        Y_H = np.median(y_clipped[upper_indices])  # Median of Y in upper tercile
+        
+        # Calculate resistance line slope: b_RL = (Y_H - Y_L) / (X_H - X_L)
+        if X_H != X_L:
+            robust_slope = (Y_H - Y_L) / (X_H - X_L)
+            
+            # Calculate residuals from the line: r_i* = Y_i - b_RL * X_i
+            residuals_from_slope = y_clipped - robust_slope * x_clipped
+            
+            # Intercept is the median of residuals: a_RL = med(r_i*)
+            robust_intercept = np.median(residuals_from_slope)
+            
+            # Calculate predictions and final residuals
+            y_pred_robust = robust_intercept + robust_slope * x_clipped
+            residuals_robust = y_clipped - y_pred_robust
+            rss_robust = np.sum(residuals_robust ** 2)
+            
+            # Calculate R² using the mathematical formula: r²xy = 1 - (RSS/TSS)
+            r2_robust = 1 - (rss_robust / tss) if tss > 0 else 0
+        else:
+            # Fallback if X values are identical in terciles
+            robust_slope = ls_slope
+            robust_intercept = ls_intercept
+            rss_robust = rss_ls
+            r2_robust = r2_ls
         
     except Exception as e:
-        print(f"Robust regression failed: {e}")
+        print(f"Resistance line calculation failed: {e}")
         robust_slope = ls_slope
         robust_intercept = ls_intercept
         rss_robust = rss_ls
@@ -296,7 +323,7 @@ def format_results_table(results_dict, horizon_label):
     """Print a nicely formatted table of results"""
     print(f"\n{'='*80}\nREGRESSION RESULTS FOR {horizon_label}\n{'='*80}")
     
-    headers = ["Tier", "N", "LS Beta1", "LS R^2", "LS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
+    headers = ["Tier", "N", "LS b_LS", "R²", "RSS", "Resistance b_LS", "Resistance RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
     print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<8} {headers[10]:<8} {headers[11]:<10} {headers[12]:<10} {headers[13]:<14}")
     print("-" * 150)
 
@@ -376,12 +403,12 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
         fit_x = np.linspace(*r["xlim"], 200)
         ls_fit_y = r["ls_intercept"] + r["ls_slope"] * fit_x
         ax.plot(fit_x, ls_fit_y, color=color, lw=2, 
-                label=f"{name} LS (b_LS={r['ls_slope']:.3f}, R^2={r['ls_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
-        
+                label=f"{name} LS (b_LS={r['ls_slope']:.3f}, R²={r['ls_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
+
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
             ax.plot(fit_x, robust_fit_y, color=color, lw=2, linestyle='--',
-                    label=f"{name} Robust (b_LS={r['robust_slope']:.3f}, R^2={r['robust_r2']:.3f})")
+                    label=f"{name} Resistance (b_RL={r['robust_slope']:.3f}, R²={r['robust_r2']:.3f})")
 
     # Set labels and title
     title = f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier"
@@ -389,7 +416,7 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
         title += f" ({year_range})"
     if index_filter:
         title += f" ({index_filter} Only)"
-    title += f"\n(Least Squares Lines {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)"
+    title += f"\n(Least Squares Lines {'and Resistance Line ' if args.show_robust else ''}Regression with R² and RSS)"
 
     ax.set_title(title)
     ax.set_xlabel(x_axis_label)
@@ -431,7 +458,7 @@ def plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_l
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
             ax.plot(fit_x, robust_fit_y, color=color, 
-                   lw=2, linestyle='--', label=f"{name} Robust (b_LS={r['robust_slope']:.3f}, R^2={r['robust_r2']:.3f})")
+                   lw=2, linestyle='--', label=f"{name} Resistance (b_LS={r['robust_slope']:.3f}, R^2={r['robust_r2']:.3f})")
 
     ax.set_title(f"{horizon_label} vs {analysis_mode_name}" + 
                 (f" ({index_filter})" if index_filter else ""))
@@ -505,12 +532,12 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
                                            p_high=97)
         elif name == "Mega-caps" or name == "Mid-caps":
             r = enhanced_regression_analysis(x_vals, y_vals,
-                                            p_low=1.0, 
-                                            p_high=99.0)
+                                            p_low=1.5, 
+                                            p_high=98.5)
         else:
             r = enhanced_regression_analysis(x_vals, y_vals,
-                                            p_low=1.0, 
-                                            p_high=99.0)
+                                            p_low=1.5, 
+                                            p_high=98.5)
 
         if r:
             results[name] = r
@@ -617,7 +644,7 @@ if not args.by_year_windows:
     if args.use_log_price_change:
         print("Using log price change on y-axis")
     print(f"{'='*80}")
-    print(f"{'Horizon':<10} {'All Samples LS R^2':<20} {'All Samples Robust R^2':<22} {'Mega-caps LS R^2':<18} {'Micro-caps LS R^2':<18}")
+    print(f"{'Horizon':<10} {'All Samples LS R^2':<20} {'All Samples Resistance R^2':<22} {'Mega-caps LS R^2':<18} {'Micro-caps LS R^2':<18}")
     print("-" * 80)
 
     for horizon_label in HORIZONS:
