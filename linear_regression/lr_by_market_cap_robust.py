@@ -322,9 +322,9 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
 def format_results_table(results_dict, horizon_label):
     """Print a nicely formatted table of results"""
     print(f"\n{'='*80}\nREGRESSION RESULTS FOR {horizon_label}\n{'='*80}")
-    
-    headers = ["Tier", "N", "LS b_LS", "R²", "RSS", "Resistance b_LS", "Resistance RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
-    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<8} {headers[10]:<8} {headers[11]:<10} {headers[12]:<10} {headers[13]:<14}")
+
+    headers = ["Tier", "N", "LS b_LS", "R²", "RSS", "Resistance b_RL", "Resistance RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
+    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<8} {headers[10]:<8} {headers[11]:<10} {headers[12]:<14}")
     print("-" * 150)
 
     for name, r in results_dict.items():
@@ -408,7 +408,7 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
             ax.plot(fit_x, robust_fit_y, color=color, lw=2, linestyle='--',
-                    label=f"{name} Resistance (b_RL={r['robust_slope']:.3f}, R²={r['robust_r2']:.3f})")
+                    label=f"{name} Resistance (b_RL={r['robust_slope']:.3f})")
 
     # Set labels and title
     title = f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier"
@@ -458,7 +458,7 @@ def plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_l
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
             ax.plot(fit_x, robust_fit_y, color=color, 
-                   lw=2, linestyle='--', label=f"{name} Resistance (b_LS={r['robust_slope']:.3f}, R^2={r['robust_r2']:.3f})")
+                   lw=2, linestyle='--', label=f"{name} Resistance (b_RL={r['robust_slope']:.3f})")
 
     ax.set_title(f"{horizon_label} vs {analysis_mode_name}" + 
                 (f" ({index_filter})" if index_filter else ""))
