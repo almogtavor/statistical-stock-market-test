@@ -421,7 +421,6 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
         title += f" ({year_range})"
     if index_filter:
         title += f" ({index_filter} Only)"
-    title += f"\n(Least Squares Lines {'and Resistance Line ' if args.show_robust else ''}Regression with R² and RSS)"
 
     ax.set_title(title)
     ax.set_xlabel(x_axis_label)

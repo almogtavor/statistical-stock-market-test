@@ -39,11 +39,32 @@
 
 \title{Revenue Growth as a Predictor of Stock Price Movements: Evidence from U.S. Public Companies}
 
-% Author information can be set in various styles:
-% For several authors from the same institution:
-\author{Maya Aharon \quad Ohad Shushan \quad Itay Ebenspander \quad Almog Tavor \\
-        Tel Aviv University \\}
-
+\author{
+\begin{tabular}{c}
+Maya Aharon \\
+\small{324126630} \\
+\small{mayaaharon1@mail.tau.ac.il}
+\end{tabular}
+\quad
+\begin{tabular}{c}
+Ohad Shushan \\
+\small{211719711} \\
+\small{ohadshushan@mail.tau.ac.il}
+\end{tabular}
+\quad
+\begin{tabular}{c}
+Itay Ebenspanger \\
+\small{322532698} \\
+\small{ebenspanger@mail.tau.ac.il}
+\end{tabular}
+\quad
+\begin{tabular}{c}
+Almog Tavor \\
+\small{323084962} \\
+\small{almogt@mail.tau.ac.il}
+\end{tabular} \\
+\\Tel Aviv University
+}
 
 \begin{document}
 \maketitle
@@ -55,23 +76,21 @@ We examine whether revenue growth serves as a predictor of future stock price mo
 
 The relationship between corporate financial metrics and stock price movements has been a central question in finance for decades. While the efficient market hypothesis suggests that publicly available information should be quickly incorporated into stock prices, substantial empirical evidence indicates that fundamental analysis can provide insights into future price movements, particularly over medium to long-term horizons.
 
-This study investigates whether revenue growth serves as a reliable predictor of future stock price changes across different market capitalization tiers and time horizons. Revenue represents the top-line measure of a company's business performance and is often considered a leading indicator of future profitability and cash generation capacity. Unlike bottom-line metrics such as earnings or free cash flow, revenue is less subject to accounting discretion and timing effects, potentially providing a cleaner signal of underlying business fundamentals.
+In this study we ask the question: \textbf{Does revenue growth serves as a reliable predictor of future stock price changes across different market capitalization tiers and time horizons?}
 
-Our research contributes to the literature in several ways. First, we provide a comprehensive comparison between revenue growth and free cash flow growth as predictors of stock performance, demonstrating the clear superiority of top-line metrics. Second, we document systematic differences in the predictive power of fundamental metrics across market capitalization tiers, with mega-cap stocks exhibiting substantially stronger fundamental-price relationships. Third, we analyze the role of index inclusion (S\&P 500, NASDAQ-100, Dow Jones 30) in enhancing these relationships. Finally, we provide open access to our complete dataset and analysis code to facilitate replication and extension of this research.
+Revenue reflects a company’s overall business performance and is often seen as a leading indicator of future profitability. Unlike metrics such as earnings or free cash flow, it is less affected by accounting adjustments, offering a clearer view of underlying fundamentals.
 
-Using quarterly financial data from over 5,000 U.S. public companies spanning 2020-2024, we employ ordinary least squares regression with robust standard errors to model the relationship between year-over-year revenue growth and forward-looking stock price changes across multiple time horizons. Our analysis incorporates outlier control through percentile-based trimming and addresses potential heterogeneity through market cap tier segmentation.
+In our research, we examined the relationship between revenue growth and future stock performance through several complementary analyses. First, we conducted a comparison between revenue growth and free cash flow growth as predictors of stock returns, finding that revenue metrics show a clear advantage. Second, we analyzed differences in predictive power across market capitalization tiers, revealing that mega-cap stocks display much stronger fundamental-price relationships. Third, we investigated how inclusion in major indices (S\&P 500, NASDAQ-100, Dow Jones 30) influences these relationships. Finally, we compiled and made publicly available a comprehensive dataset and the full analysis code, enabling replication and further exploration of our findings.
 
-The remainder of this paper is organized as follows. Section 2 describes our data collection and preparation methodology. Section 3 outlines our statistical framework and hypothesis testing approach. Section 4 presents our main empirical results, including the comparison between revenue and FCF models, market cap effects, and index-specific analyses. Section 5 discusses the economic interpretation and practical implications of our findings. Section 6 concludes with a summary of key results and suggestions for future research.
+Using data from U.S. public companies between 2020 and 2024, we apply least squares regression with resistance standard errors to examine how year-over-year revenue growth relates to future stock price changes over different time horizons. We control for outliers by trimming extreme values and account for differences between companies by grouping them into market capitalization tiers.
 
 \section{Data Collection and Preparation}
 
-We assembled a comprehensive panel dataset of quarterly financial statements and daily stock prices covering over 5,000 U.S. public companies from 2020-2024. Our data collection process employed two complementary approaches: SimFin's API \citep{simfin} for historical data through 2023, and direct SEC EDGAR filings via the Financial Modeling Prep API for 2024-2025 data to ensure currency and completeness.
+We built a dataset of quarterly financial statements and daily stock prices for over 5,000 U.S. public companies from 2020 to 2024. We used two primary data sources: SimFin's API \citep{simfin} for financial data in 2020-2023, and Yahoo Finance for data in 2024-2025 to ensure currency and completeness.
 
-From each company's quarterly income statement, we extracted total revenue and computed year-over-year growth rates by comparing each quarter to the corresponding quarter from the previous year. We also collected free cash flow data, calculated as operating cash flow minus capital expenditures, though preliminary analysis revealed that revenue growth demonstrated superior predictive properties for stock price movements.
+For each company, revenue and stock price growth were calculated as the percentage change from the report date to the corresponding date in subsequent periods (6 months, 1 year, 2 years, and 3 years ahead).
 
-Stock price data was sourced from Yahoo Finance, with prices matched to the first available trading day within seven calendar days of each quarterly earnings report date. Forward-looking price growth was calculated as the percentage change from the report date to the corresponding date in subsequent periods (6 months, 1 year, 2 years, and 3 years ahead). Market capitalization was computed as price multiplied by shares outstanding at each report date.
-
-\textbf{Data Quality and Limitations.} Our dataset exhibits survivorship bias, as delisted companies disappear from current price feeds. Coverage is most comprehensive for 2021-2024 when both data sources were most reliable. We handle missing values and infinite growth rates (from zero-revenue base periods) through robust outlier detection, trimming observations beyond the 3rd and 97th percentiles for each metric.  
+\textbf{Data Quality and Limitations.} Our dataset exhibits survivorship bias, as delisted companies disappear from current price feeds. We handle missing values and infinite growth rates (from zero-revenue base periods) through resistance outlier detection, \textcolor{red}{trimming observations beyond the 3rd and 97th percentiles for each metric.}
 
 \begin{table*}[h]
   \setlength{\tabcolsep}{4pt}
@@ -106,15 +125,16 @@ Given the poor performance of FCF-based metrics, we pivoted to revenue growth as
 
 \subsection{Statistical Framework}
 
-We employ ordinary least squares (OLS) regression with robust standard errors, modeling the relationship:
+We use least squares regression with resistance standard errors, modeling the relationship:
 
 \begin{equation}
-\text{Price Growth}_{i,t+h} = \alpha + \beta \cdot \text{Revenue Growth}_{i,t} + \epsilon_{i,t}
+\textit{PriceGrowth}_{i,t+h} = a + b \cdot \textit{RevenueGrowth}_{i,t} + \epsilon_{i,t}
+% \text{PriceGrowth}_{i,t+h} = \text{a} + \text{b} \cdot \text{RevenueGrowth}_{i,t} + \epsilon_{i,t}
 \end{equation}
 
 where $i$ indexes firms, $t$ indexes quarterly report periods, and $h$ represents forward-looking horizons (6M, 1Y, 2Y, 3Y). We implement outlier control by trimming observations beyond the 3rd and 97th percentiles for both dependent and independent variables.
 
-To address heterogeneity in firm characteristics, we segment our analysis by market capitalization tiers:
+To account for differences between companies, we group them by market capitalization tier:
 \begin{itemize}
 \item \textbf{Micro-caps}: Bottom 10\% by market cap
 \item \textbf{Mid-caps}: Middle 80\% by market cap  
@@ -123,9 +143,23 @@ To address heterogeneity in firm characteristics, we segment our analysis by mar
 
 We also analyze specific market indices (S\&P 500, NASDAQ-100, Dow Jones 30) to examine whether index inclusion affects the revenue-price relationship.
 
+% \subsection{Hypothesis Testing}
+
+% For each regression, we test the null hypothesis $H_0: b = 0$ against the alternative $H_1: b \neq 0$ using t-tests with resistance standard errors. We report Pearson correlation coefficients to assess the strength and direction of the relationships.
+
+% The analysis assumes a linear relationship between the variables, independence of observations (except for repeated observations of the same company), and homoscedasticity after applying resistance standard errors. We use the Least Squares estimator to obtain coefficient estimates.
+
+% Statistical significance is evaluated at the 0.05 level.
+
 \subsection{Hypothesis Testing}
 
-For each regression, we test the null hypothesis $H_0: \beta = 0$ against the alternative $H_1: \beta \neq 0$ using t-tests with robust standard errors. We report both parametric (Pearson) and non-parametric (Spearman) correlation coefficients to assess the strength and direction of relationships.
+Our analysis focuses on examining whether there is a linear relationship between revenue growth and future price growth. This is reflected in three steps:  
+\\ 1. Conducting hypothesis tests, where we test \( H_0: b = 0 \) against \( H_1: b \neq 0 \) using t-tests with resistance standard errors.
+\\ 2. Calculating the Pearson correlation coefficient and the coefficient of determination (\(R^2\)) to measure the strength and direction of the relationship. We also examine the least squares regression line (minimizing the residual sum of squares, RSS) as well as the resistance regression line, and report the corresponding p-values.
+\\ 3. Computing 95\% confidence intervals for the estimated coefficients.
+
+The analysis assumes a linear relationship between the variables, independence of observations (except for repeated observations of the same company), and homoscedasticity after applying resistance standard errors. Coefficients are estimated using the Least Squares method, and statistical significance is evaluated at the 0.05 level.
+
 
 \section{Results}
 
@@ -143,10 +177,10 @@ Cap Tier & \multicolumn{2}{c}{FCF Growth} & \multicolumn{2}{c}{Revenue Growth} \
 \cmidrule(r){2-3} \cmidrule(l){4-5}
  & $R^2$ & Pearson & $R^2$ & Pearson \\
 \midrule
-Mega-caps & 0.002 & 0.040 & 0.102 & 0.320*** \\
-Mid-caps  & 0.000 & 0.003 & 0.011 & 0.106*** \\
-Micro-caps & 0.001 & 0.034 & 0.025 & 0.158*** \\
-All & 0.000 & 0.003 & 0.011 & 0.106*** \\
+Mega-caps & 0.002 & 0.040 & 0.102 & 0.320 \\
+Mid-caps  & 0.000 & 0.003 & 0.011 & 0.106 \\
+Micro-caps & 0.001 & 0.034 & 0.025 & 0.158 \\
+All & 0.000 & 0.003 & 0.011 & 0.106 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -174,10 +208,10 @@ Analysis of major market indices reveals enhanced predictive power within these 
 \toprule
 Horizon & Mega-caps $R^2$ & Mega-caps $\rho$ & S\&P $R^2$ & S\&P $\rho$ \\
 \midrule
-6M & 0.054 & 0.231*** & 0.024 & 0.156*** \\
-1Y & 0.148 & 0.384*** & 0.046 & 0.216*** \\
-2Y & 0.145 & 0.381*** & 0.010 & 0.099*** \\
-3Y & 0.351 & 0.592*** & 0.001 & 0.030 \\
+6M & 0.054 & 0.231 & 0.024 & 0.156 \\
+1Y & 0.148 & 0.384 & 0.046 & 0.216 \\
+2Y & 0.145 & 0.381 & 0.010 & 0.099 \\
+3Y & 0.351 & 0.592 & 0.001 & 0.030 \\
 \bottomrule
 \end{tabular}
 \end{table}
