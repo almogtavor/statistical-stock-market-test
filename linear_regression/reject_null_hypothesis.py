@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import stats
 
-def regression_analysis(X, Y, alpha=0.05):
+def regression_analysis(X, Y, alpha=0.001):
     X = np.array(X, dtype=float)
     Y = np.array(Y, dtype=float)
     n = len(X)
@@ -48,7 +48,6 @@ def regression_analysis(X, Y, alpha=0.05):
         "reject_H0": abs(t_stat) > t_crit
     }
 
-# דוגמה לשימוש
 # X = [1, 2, 3, 4, 5]
 # Y = [2, 3, 4, 5, 7]
 

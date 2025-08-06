@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-lr_by_market_cap_robust.py
 
-Enhanced version that splits into cap tiers (top10%, mid80%, bottom10%, all) and runs
-Price Δ vs FCFps Δ analysis for each segment, including:
+Linear Regression analysis that splits into cap tiers (top10%, mid80%, bottom10%, all)
+Price change vs FCFps change or Revenue change analysis for each segment, including:
 - OLS regression with R^2, RSS
 - Robust regression (Huber regression)
 - Comprehensive statistical metrics
@@ -18,14 +17,12 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.metrics import r2_score
 import warnings
 import math
-from codemaya import regression_analysis
+from reject_null_hypothesis import regression_analysis
 warnings.filterwarnings('ignore')
 
+EXTREME_COMPANIES_PERCENTS = 10
 
 # Constants
-EXTREME_COMPANIES_PERCENTS = 10
-P_LOWEST_CAP_CLIPPING_HIGH = 95
-P_LOWEST_CAP_CLIPPING_LOW = 5
 CSV = "../fcf_dataset.csv"
 HORIZONS = ["6M", "1Y", "2Y", "3Y"]
 
@@ -184,7 +181,7 @@ if args.use_fcf_yield:
 # -----------------------------------------------------------------------------
 # Enhanced helper to clip & regress & report with R^2 and RSS
 # -----------------------------------------------------------------------------
-def enhanced_regression_analysis(x, y, p_low=2.0, p_high=98.0):
+def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
     """
     Perform both OLS and robust regression with comprehensive metrics
     """
@@ -197,11 +194,6 @@ def enhanced_regression_analysis(x, y, p_low=2.0, p_high=98.0):
         return None
     
     # Clip outliers
-
-    res = regression_analysis(x,y)
-    print("res")
-    print(res)
-
     x_clip_min, x_clip_max = np.percentile(x, [p_low, p_high])
     y_clip_min, y_clip_max = np.percentile(y, [p_low, p_high])
     mask = (x >= x_clip_min) & (x <= x_clip_max) & (y >= y_clip_min) & (y <= y_clip_max)
@@ -243,6 +235,7 @@ def enhanced_regression_analysis(x, y, p_low=2.0, p_high=98.0):
     p_value = 2 * stats.t.sf(abs(t_stat), df=n - 2) if SE > 0 else 1
     tcrit = stats.t.ppf(0.975, df=n - 2)
     ci = (ols_slope - tcrit * SE, ols_slope + tcrit * SE) if SE > 0 else (ols_slope, ols_slope)
+    reject_H0 = abs(t_stat) > tcrit if SE > 0 else False
     
     # Robust Regression (Huber)
     try:
@@ -276,6 +269,8 @@ def enhanced_regression_analysis(x, y, p_low=2.0, p_high=98.0):
         "ols_CI": ci,
         "ols_r2": r2_ols,
         "ols_rss": rss_ols,
+        "ols_t_crit": tcrit,
+        "ols_reject_H0": reject_H0,
         # Robust results
         "robust_intercept": robust_intercept,
         "robust_slope": robust_slope,
@@ -297,14 +292,15 @@ def format_results_table(results_dict, horizon_label):
     """Print a nicely formatted table of results"""
     print(f"\n{'='*80}\nREGRESSION RESULTS FOR {horizon_label}\n{'='*80}")
     
-    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "Pearson Corr"]
-    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<14}")
-    print("-" * 120)
+    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
+    print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<8} {headers[10]:<8} {headers[11]:<10} {headers[12]:<10} {headers[13]:<14}")
+    print("-" * 150)
 
     for name, r in results_dict.items():
         if r:
             print(f"{name:<12} {r['n']:<6} {r['ols_slope']:<10.4f} {r['ols_r2']:<8.3f} {r['ols_rss']:<12.1f} "
                   f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g} "
+                  f"{r['ols_t']:<8.3f} {r['ols_t_crit']:<8.3f} {r['ols_SE']:<10.3g} {str(r['ols_reject_H0']):<10} "
                   f"{r['correlations']['pearson']:<14.3f}")
 
 
@@ -445,16 +441,22 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
     # Prepare data for analysis
     x_pct_col, y_pct_col, x_axis_label = prepare_data_for_analysis(df_filtered, horizon, analysis_mode_key, use_log_price_change, log_x_axis)
     
-    # Define cap tiers
-    largest_market_cap_stocks = df_filtered["Market_Cap"].quantile(EXTREME_COMPANIES_PERCENTS / 100)
-    smallest_market_cap_stocks = df_filtered["Market_Cap"].quantile(1 - (EXTREME_COMPANIES_PERCENTS / 100))
+    # Define cap tiers - if analyzing a specific index, only use "All Samples"
+    if index_filter:
+        tiers = {
+            "All Samples": df_filtered.index,
+        }
+    else:
+        # Define cap tiers for general analysis
+        largest_market_cap_stocks = df_filtered["Market_Cap"].quantile(EXTREME_COMPANIES_PERCENTS / 100)
+        smallest_market_cap_stocks = df_filtered["Market_Cap"].quantile(1 - (EXTREME_COMPANIES_PERCENTS / 100))
 
-    tiers = {
-        "All Samples": df_filtered.index,
-        "Mega-caps": df_filtered[df_filtered["Market_Cap"] >= smallest_market_cap_stocks].index,
-        "Micro-caps": df_filtered[df_filtered["Market_Cap"] <= largest_market_cap_stocks].index,
-        "Mid-caps": df_filtered[(df_filtered["Market_Cap"] > largest_market_cap_stocks) & (df_filtered["Market_Cap"] < smallest_market_cap_stocks)].index,
-    }
+        tiers = {
+            "All Samples": df_filtered.index,
+            "Mega-caps": df_filtered[df_filtered["Market_Cap"] >= smallest_market_cap_stocks].index,
+            "Micro-caps": df_filtered[df_filtered["Market_Cap"] <= largest_market_cap_stocks].index,
+            "Mid-caps": df_filtered[(df_filtered["Market_Cap"] > largest_market_cap_stocks) & (df_filtered["Market_Cap"] < smallest_market_cap_stocks)].index,
+        }
 
     # Run enhanced analysis for all tiers
     results = {}
@@ -473,18 +475,23 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
         x_vals = sub_clean[x_pct_col].values
         y_vals = sub_clean[y_pct_col].values
         print(name)
-        if name == "Micro-caps":
+        
+        # Use appropriate clipping based on tier and whether we're analyzing an index
+        if index_filter:
+            # For index analysis, use standard clipping for all samples
+            r = enhanced_regression_analysis(x_vals, y_vals, p_low=0.5, p_high=99.5)
+        elif name == "Micro-caps":
             r = enhanced_regression_analysis(x_vals, y_vals,
-                                           p_low=P_LOWEST_CAP_CLIPPING_LOW, 
-                                           p_high=P_LOWEST_CAP_CLIPPING_HIGH)
+                                           p_low=3, 
+                                           p_high=97)
         elif name == "Mega-caps" or name == "Mid-caps":
             r = enhanced_regression_analysis(x_vals, y_vals,
-                                            p_low=2.0, 
-                                            p_high=98.0)
+                                            p_low=1.0, 
+                                            p_high=99.0)
         else:
             r = enhanced_regression_analysis(x_vals, y_vals,
-                                            p_low=2.0, 
-                                            p_high=98.0)
+                                            p_low=1.0, 
+                                            p_high=99.0)
 
         if r:
             results[name] = r
