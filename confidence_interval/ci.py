@@ -32,16 +32,16 @@ def main():
     
     # Define analysis columns based on mode
     if args.analysis_mode == "revenue_growth":
-        x_cols = ['1Y_Revenue_growth', '2Y_Revenue_growth']
+        x_cols = ['1Y_Revenue_growth', '2Y_Revenue_growth', '3Y_Revenue_growth']
         analysis_name = "Revenue Growth"
         x_label = "Revenue Growth (%)"
     else:  # fcf_growth
-        x_cols = ['1Y_FCFps_growth', '2Y_FCFps_growth'] 
+        x_cols = ['1Y_FCFps_growth', '2Y_FCFps_growth', '3Y_FCFps_growth']
         analysis_name = "FCF Growth"
         x_label = "FCFps Growth (%)"
     
     # Select relevant columns
-    base_cols = ['Ticker', 'Market_Cap', '1Y_Price_growth', '2Y_Price_growth']
+    base_cols = ['Ticker', 'Market_Cap', '1Y_Price_growth', '2Y_Price_growth', '3Y_Price_growth']
     df = df[base_cols + x_cols]
     df = df.replace([np.inf, -np.inf], np.nan).dropna()
 
@@ -60,7 +60,8 @@ def main():
     # Add forward-looking price columns
     df['1Y_Price_growth_lead'] = df.groupby('Ticker')['1Y_Price_growth'].shift(-1)
     df['2Y_Price_growth_lead'] = df.groupby('Ticker')['2Y_Price_growth'].shift(-2)
-    df = df.dropna(subset=['1Y_Price_growth_lead', '2Y_Price_growth_lead'])
+    df['3Y_Price_growth_lead'] = df.groupby('Ticker')['3Y_Price_growth'].shift(-3)
+    df = df.dropna(subset=['1Y_Price_growth_lead', '2Y_Price_growth_lead', '3Y_Price_growth_lead'])
 
     print(f"Analysis: {analysis_name} vs Price Change")
     if index_filter:
@@ -85,9 +86,9 @@ def main():
 
     colors = {
         "Micro": "orange",
-        "Mid": "green", 
+        "Mid": "black", 
         "Mega": "blue",
-        "All": "black"
+        "All": "green"
     }
 
     def collect_ci_slopes(df_dict, x_col, y_col, label_suffix):
@@ -127,7 +128,8 @@ def main():
     # Collect confidence intervals for both horizons
     ci_df_1y = collect_ci_slopes(tiers, x_cols[0], '1Y_Price_growth_lead', '1Y')
     ci_df_2y = collect_ci_slopes(tiers, x_cols[1], '2Y_Price_growth_lead', '2Y')
-    ci_df = pd.concat([ci_df_1y, ci_df_2y]).reset_index(drop=True)
+    ci_df_3y = collect_ci_slopes(tiers, x_cols[2], '3Y_Price_growth_lead', '3Y')
+    ci_df = pd.concat([ci_df_1y, ci_df_2y, ci_df_3y]).reset_index(drop=True)
 
     if len(ci_df) == 0:
         print("No valid data for confidence interval analysis")
@@ -142,7 +144,7 @@ def main():
 
     plt.yticks(range(len(ci_df)), ci_df['Group'])
     plt.axvline(x=0, color='black', linestyle='--', linewidth=1, alpha=0.7)
-    plt.xlabel(f"OLS Slope ({x_label} vs. Price Growth)", fontsize=12)
+    plt.xlabel(f"LS Slope ({x_label} vs. Price Growth)", fontsize=12)
     
     # Create title with filter information
     title = f"Slope & Confidence Intervals by Market Cap Tier ({analysis_name})"
