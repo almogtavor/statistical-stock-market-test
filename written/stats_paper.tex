@@ -130,8 +130,8 @@ Given the poor performance of FCF-based metrics, we pivoted to revenue growth as
 We use least squares regression with resistance standard errors, modeling the relationship:
 
 \begin{equation}
-\textit{PriceGrowth}_{i,t+h} = a + b \cdot \textit{RevenueGrowth}_{i,t} + \epsilon_{i,t}
-% \text{PriceGrowth}_{i,t+h} = \text{a} + \text{b} \cdot \text{RevenueGrowth}_{i,t} + \epsilon_{i,t}
+\textit{PriceGrowth}{i,t+h} = a + b \cdot \textit{RevenueGrowth}{i,t} + \epsilon_{i,t}
+% \text{PriceGrowth}{i,t+h} = \text{a} + \text{b} \cdot \text{RevenueGrowth}{i,t} + \epsilon_{i,t}
 \end{equation}
 
 where $i$ indexes firms, $t$ indexes quarterly report periods, and $h$ represents forward-looking horizons (6M, 1Y, 2Y, 3Y). We implement outlier control by trimming observations beyond the 3rd and 97th percentiles for both dependent and independent variables.
@@ -165,144 +165,93 @@ The analysis assumes a linear relationship between the variables, independence o
 
 \section{Results}
 
-\subsection{Revenue Growth Superior to FCF Growth}
+\subsection{Summary of Findings}
 
-Table~\ref{tab:fcf-vs-revenue} demonstrates the clear superiority of revenue growth over FCF growth as a predictor of stock price movements. While FCF growth shows negligible explanatory power across all market cap tiers and time horizons, revenue growth exhibits substantial and statistically significant relationships, particularly for mega-cap stocks.
+\subsubsection{Statistical Significance of $b_{LS}$ Estimates}
 
-\begin{table}[!htbp]
-\centering
-\caption{Comparison of FCF Growth vs Revenue Growth as Predictors (1-Year Horizon)}
-\label{tab:fcf-vs-revenue}
-\begin{tabular}{lcccc}
-\toprule
-Cap Tier & \multicolumn{2}{c}{FCF Growth} & \multicolumn{2}{c}{Revenue Growth} \\
-\cmidrule(r){2-3} \cmidrule(l){4-5}
- & $R^2$ & Pearson & $R^2$ & Pearson \\
-\midrule
-Mega-caps & 0.002 & 0.040 & 0.102 & 0.320 \\
-Mid-caps  & 0.000 & 0.003 & 0.011 & 0.106 \\
-Micro-caps & 0.001 & 0.034 & 0.025 & 0.158 \\
-All & 0.000 & 0.003 & 0.011 & 0.106 \\
-\bottomrule
-\end{tabular}
-\end{table}
+In all regressions, we tested the null hypothesis $H_0: b_{LS} = 0$ and evaluated statistical significance using a standard t-test. Across all horizons, subsamples, and index-based splits, the p-values are consistently below the conventional threshold of 0.05 (in most cases, well below $<0.001$), leading us to \textbf{reject the null hypothesis in every single case}. This indicates that the Least Squares estimator return coefficient is statistically significant throughout the entire analysis.
 
-\vspace{1em}
-\FloatBarrier
+\subsubsection{Insights from Main Sample by Horizon and Size}
 
-\subsection{Market Capitalization Effects}
+Table~\ref{tab:regression-all} summarizes regression outcomes across four horizons (6M, 1Y, 2Y, 3Y), and by size tier (All, Mega, Micro, Mid caps).
 
-Our analysis reveals a clear hierarchy in the revenue-price relationship across market cap tiers. Figure~\ref{fig:revenue-by-cap} illustrates that mega-cap stocks exhibit the strongest relationships between revenue growth and future price performance across all time horizons.
+Key findings include:
 
-For the 1-year horizon, mega-caps achieve $R^2 = 0.102$ with a Pearson correlation of 0.320 (p < 0.001), indicating that approximately 10\% of future price variation can be explained by current revenue growth. This relationship strengthens over longer horizons, reaching $R^2 = 0.105$ for the 3-year period with correlation of 0.324.
-
-In contrast, micro-caps and mid-caps show weaker but still statistically significant relationships. Mid-caps consistently exhibit $R^2$ values around 0.008-0.011 across horizons, while micro-caps show declining explanatory power from 0.025 (1Y) to 0.005 (3Y).
-
-\begin{figure*}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{images/all_horizons_all_stocks_single_plot.png}
-\caption{Revenue growth vs. price changes across time horizons (6M, 1Y, 2Y, 3Y) and market cap tiers. Mega-caps show the strongest relationships, followed by micro-caps and mid-caps.}
-\label{fig:revenue-by-cap}
-\end{figure*}
-
-\subsection{Index-Specific Analysis}
-
-Analysis of major market indices reveals enhanced predictive power within these curated sets of high-quality companies. Table~\ref{tab:index-results} presents results for S\&P 500 constituents, which demonstrate substantially stronger revenue-price relationships than the broader market.
-
-\begin{table}[!htbp]
-\centering
-\caption{S\&P 500 Revenue Growth Analysis Results}
-\label{tab:index-results}
-\begin{tabular}{lcccc}
-\toprule
-Horizon & Mega-caps $R^2$ & Mega-caps $\rho$ & S\&P $R^2$ & S\&P $\rho$ \\
-\midrule
-6M & 0.054 & 0.231 & 0.024 & 0.156 \\
-1Y & 0.148 & 0.384 & 0.046 & 0.216 \\
-2Y & 0.145 & 0.381 & 0.010 & 0.099 \\
-3Y & 0.351 & 0.592 & 0.001 & 0.030 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\vspace{1em}
-\FloatBarrier
-
-Notably, S\&P 500 mega-caps at the 3-year horizon achieve $R^2 = 0.351$, indicating that revenue growth explains over one-third of future price variation—a remarkably strong relationship in equity markets.
-
-\begin{figure*}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{images/1_year_sp500_plot.png}
-\caption{S\&P 500 constituents: 1-year price change vs. revenue growth. Index constituents show stronger fundamental-price relationships than the broader market.}
-\label{fig:sp500}
-\end{figure*}
-
-\begin{figure*}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{images/1_year_nasdaq100_plot.png}
-\caption{NASDAQ-100 constituents: 1-year price change vs. revenue growth. Technology-focused index shows robust revenue-price relationships.}
-\label{fig:nasdaq100}
-\end{figure*}
-
-\begin{figure*}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{images/1_year_dow30_plot.png}
-\caption{Dow Jones 30 constituents: 1-year price change vs. revenue growth. Blue-chip stocks demonstrate strong fundamental-based pricing relationships.}
-\label{fig:dow30}
-\end{figure*}
-
-\subsection{Statistical Significance and Hypothesis Testing}
-
-Table~\ref{tab:hypothesis-tests} summarizes our hypothesis testing results. We reject the null hypothesis of no relationship ($H_0: \beta = 0$) for mega-caps across all horizons and for most mid-cap and micro-cap specifications, though the economic magnitude varies substantially.
-
-\begin{table}[!htbp]
-\small
-\centering
-\caption{Statistical Significance Tests (Revenue Growth)}
-\label{tab:hypothesis-tests}
-\begin{tabular}{lccc}
-\toprule
-Market Cap Tier & 1Y p-value & 2Y p-value & 3Y p-value \\
-\midrule
-Mega-caps & $< 10^{-90}$ & $< 10^{-50}$ & $< 10^{-50}$ \\
-Mid-caps  & $< 10^{-80}$ & $< 10^{-50}$ & $< 10^{-30}$ \\
-Micro-caps & $< 10^{-20}$ & $< 10^{-8}$ & $< 10^{-3}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\FloatBarrier
-
-\subsection{Confidence Interval Analysis}
-
-Figure~\ref{fig:confidence-intervals} presents 95\% confidence intervals for the slope coefficients across market cap tiers and time horizons. All confidence intervals exclude zero, confirming statistical significance. The confidence intervals are notably tighter for mega-caps, reflecting both larger effect sizes and more stable relationships within this tier.
-
-\begin{figure*}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{images/all_horizons_confidence_intervals.png}
-\caption{95\% confidence intervals for slope coefficients across market cap tiers and time horizons. Error bars show standard errors for least squares estimates.}
-\label{fig:confidence-intervals}
-\end{figure*}
-
-The slope coefficients indicate that a 1 percentage point increase in revenue growth is associated with approximately 0.18 percentage point increase in 1-year forward price growth for mega-caps, compared to 0.14 percentage points for micro-caps and 0.16 percentage points for mid-caps.
-
-\subsection{Logarithmic Transformations}
-
-To address potential non-linearities and reduce the influence of extreme values, we examined logarithmic transformations of both the dependent variable (log price changes) and independent variable (log revenue growth). These transformations yielded qualitatively similar results to our baseline specifications, with slightly improved model fit in some cases. The log-log specification is particularly valuable for interpreting relationships as elasticities rather than linear effects.
-
-\subsection{Limitations and Low Explanatory Power}
-
-Despite statistical significance, our models exhibit relatively low explanatory power as measured by $R^2$. Even the strongest relationship (S\&P 500 mega-caps, 3-year horizon) explains only 35\% of price variation. This finding aligns with extensive literature documenting the inherent unpredictability of stock price movements and the influence of factors beyond fundamental metrics.
-
-The low $R^2$ values reflect several limitations:
 \begin{itemize}
-\item Stock prices incorporate forward-looking expectations beyond current revenue growth
-\item Market sentiment, macroeconomic factors, and industry dynamics introduce substantial noise
-\item Revenue growth, while fundamental, represents only one component of firm valuation
-\item Our model omits potentially important control variables (profitability, leverage, growth opportunities)
+    \item The $b_{LS}$ coefficient is consistently positive and statistically significant across all tiers and time horizons, with stronger magnitudes in longer horizons. For example, the highest values of $b_{LS} = 0.4352$ are observed for Mega-caps at both 1Y and 2Y horizons, with corresponding p-values $<0.001$.
+    
+    \item The $R^2$ values indicate moderate explanatory power, especially for Mega-caps and longer horizons (peaking at $R^2 = 0.086$ for Mega-caps at 3Y), with highly significant p-values (e.g., $<0.001$). The low p-values support the explanatory strength of the model.
+
+    \item Pearson correlation values also increase with horizon length, and are highest for Mega-caps (e.g., Pearson = 0.293 at 3Y), indicating stronger linear relationships in larger-cap samples, accompanied by highly significant t-statistics and p-values below 0.001.
+
+    \item While all results lead to rejection of $H_0$, the \textbf{strongest signal} appears in the 1Y and 2Y horizons for Mega-caps. This is due to the relatively high $b_{LS}$ values, high Pearson correlations, and very low p-values, suggesting that return predictability is most pronounced in these segments.
 \end{itemize}
 
-Nevertheless, the consistent statistical significance across specifications suggests that revenue growth contains genuine information about future stock performance, particularly for large-capitalization stocks.
+\subsubsection{Insights from Index-Based 1-Year Horizon}
+
+Table~\ref{tab:regression-1y-index} focuses on 1-year horizon regressions, segmented by major U.S. indices: S\&P 500, NASDAQ-100, and Dow Jones 30. This breakdown was chosen due to the relatively high correlation observed at the 1Y horizon in the main sample.
+
+Key findings include:
+
+\begin{itemize}
+    \item All three index-based samples yield statistically significant $b_{LS}$ coefficients, with p-values well below 0.001, and again the null hypothesis is rejected in all cases.
+
+    \item The NASDAQ-100 and Dow Jones 30 exhibit particularly strong results:
+        \begin{itemize}
+            \item NASDAQ-100 has the highest $b_{LS} = 0.6957$ and Pearson correlation of 0.339, with p-value $<0.001$.
+            \item Dow Jones 30 shows the highest $R^2 = 0.230$ and Pearson correlation of 0.480, despite its smaller sample size, and with a highly significant p-value $<0.001$. This suggests strong statistical confidence in the observed relationship.
+        \end{itemize}
+
+    \item Compared to the 1Y results in Table~\ref{tab:regression-all}, these index-specific samples, especially Dow Jones 30, demonstrate stronger relationships. This suggests that in more concentrated or higher-quality indices, return predictability may be more pronounced, supported by large effect sizes and extremely low p-values.
+\end{itemize}
+
+\begin{table*}[h]
+\centering
+\caption{Regression Results for Main Sample Across All Horizons}
+\label{tab:regression-all}
+\small
+\begin{tabular}{lcccccccccc}
+\toprule
+Horizon & Tier & N & $b_{LS}$ & $R^2$ & $b_{RL}$ & p-value & t-stat & t-crit & SE & Pearson \\
+\midrule
+6M  & All Samples & 45217 & 0.1149 & 0.014 & -0.062 & <0.001 & 25.753 & 1.960 & 0.00446 & 0.120 \\
+6M  & Mega-caps   & 4537  & 0.2226 & 0.034 &  0.010 & <0.001  & 12.565 & 1.960 & 0.0177  & 0.183 \\
+6M  & Micro-caps  & 4288  & 0.0617 & 0.007 & -0.054 & <0.001    &  5.374 & 1.961 & 0.0115  & 0.082 \\
+6M  & Mid-caps    & 36171 & 0.1293 & 0.017 & -0.056 & <0.001 & 24.880 & 1.960 & 0.0052  & 0.130 \\
+\midrule
+1Y  & All Samples & 39991 & 0.1875 & 0.027 & -0.157 & <0.001 & 33.462 & 1.960 & 0.0056  & 0.165 \\
+1Y  & Mega-caps   & 3983  & 0.4352 & 0.081 & -0.004 & <0.001  & 18.774 & 1.961 & 0.0232  & 0.285 \\
+1Y  & Micro-caps  & 3764  & 0.0952 & 0.012 & -0.062 & <0.001  &  6.840 & 1.961 & 0.0139  & 0.111 \\
+1Y  & Mid-caps    & 31762 & 0.1979 & 0.028 & -0.126 & <0.001 & 30.289 & 1.960 & 0.00653 & 0.168 \\
+\midrule
+2Y  & All Samples & 29433 & 0.1265 & 0.023 & -0.180 & <0.001 & 26.263 & 1.960 & 0.00482 & 0.151 \\
+2Y  & Mega-caps   & 2950  & 0.4352 & 0.085 &  0.050 & <0.001  & 16.555 & 1.961 & 0.0263  & 0.292 \\
+2Y  & Micro-caps  & 2740  & 0.0459 & 0.009 & -0.283 & <0.001   &  4.918 & 1.961 & 0.00933 & 0.094 \\
+2Y  & Mid-caps    & 23588 & 0.1321 & 0.024 & -0.126 & <0.001 & 23.942 & 1.960 & 0.00552 & 0.154 \\
+\midrule
+3Y  & All Samples & 20149 & 0.0932 & 0.017 & -0.302 & <0.001  & 18.508 & 1.960 & 0.00504 & 0.129 \\
+3Y  & Mega-caps   & 2021  & 0.3910 & 0.086 &  0.043 & <0.001  & 13.774 & 1.961 & 0.0284  & 0.293 \\
+3Y  & Micro-caps  & 1883  & 0.0178 & 0.003 & -0.324 & 0.0209                  &  2.311 & 1.961 & 0.00772 & 0.053 \\
+3Y  & Mid-caps    & 16129 & 0.1024 & 0.019 & -0.196 & <0.001  & 17.711 & 1.960 & 0.00578 & 0.138 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+\begin{table*}[h]
+\centering
+\caption{Regression Results for 1Y Horizon (Index-Specific Samples)}
+\label{tab:regression-1y-index}
+\small
+\begin{tabular}{lcccccccccc}
+\toprule
+Index & N & $b_{LS}$ & $R^2$ & $b_{RL}$ & p-value & t-stat & t-crit & SE & Pearson \\
+\midrule
+S\&P 500     & 7253 & 0.3536 & 0.071 & -0.105 & <0.001 & 23.508 & 1.960 & 0.0150 & 0.266 \\
+NASDAQ-100   & 1549 & 0.6957 & 0.115 &  0.104 & <0.001  & 14.170 & 1.961 & 0.0491 & 0.339 \\
+Dow Jones 30 &  430 & 0.6140 & 0.230 &  0.157 & <0.001 & 11.312 & 1.966 & 0.0543 & 0.480 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
 
 \section{Discussion}
 
