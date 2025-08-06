@@ -3,7 +3,7 @@
 
 Linear Regression analysis that splits into cap tiers (top10%, mid80%, bottom10%, all)
 Price change vs FCFps change or Revenue change analysis for each segment, including:
-- OLS regression with R^2, RSS
+- LS regression with R^2, RSS
 - Robust regression (Huber regression)
 - Comprehensive statistical metrics
 """
@@ -50,9 +50,9 @@ def calculate_non_overlapping_net_income_growth(df):
     df = df.sort_values(['Ticker', 'Report Date'])
     
     # Remove existing columns if they exist
-    existing_cols = [col for col in df.columns if 'NetIncome_growth' in col]
-    if existing_cols:
-        df = df.drop(columns=existing_cols)
+    existing_cls = [col for col in df.columns if 'NetIncome_growth' in col]
+    if existing_cls:
+        df = df.drop(columns=existing_cls)
     
     df["Quarter"] = df["Report Date"].dt.quarter
     
@@ -74,9 +74,9 @@ def calculate_non_overlapping_net_income_growth(df):
     df_6m['Report Date'] = df_6m['Report Date_Q3']
     
     # Merge back
-    for data, cols in [(df_6m, ['6M_NetIncome_growth']), (df_q1, ['1Y_NetIncome_growth', '2Y_NetIncome_growth', '3Y_NetIncome_growth'])]:
-        merge_cols = ['Ticker', 'Report Date'] + cols
-        df = df.merge(data[merge_cols], on=['Ticker', 'Report Date'], how='left')
+    for data, cls in [(df_6m, ['6M_NetIncome_growth']), (df_q1, ['1Y_NetIncome_growth', '2Y_NetIncome_growth', '3Y_NetIncome_growth'])]:
+        merge_cls = ['Ticker', 'Report Date'] + cls
+        df = df.merge(data[merge_cls], on=['Ticker', 'Report Date'], how='left')
     
     return df
 
@@ -154,7 +154,7 @@ def get_filename_suffix(analysis_mode, index_filter, use_log_price_change=False,
 # CLI
 parser = argparse.ArgumentParser()
 parser.add_argument("--single-panel", action="store_true", help="Overlay all horizons' All Samples results on one panel")
-parser.add_argument("--show-robust", action="store_true", default=True, help="Show robust regression lines alongside OLS")
+parser.add_argument("--show-robust", action="store_true", default=True, help="Show robust regression lines alongside LS")
 parser.add_argument("--save-plots", action="store_true", help="Save plots to files instead of showing them")
 parser.add_argument("--no-plots", action="store_true", help="Skip all plotting and show only statistical results")
 parser.add_argument("--nasdaq100-only", action="store_true", help="Restrict analysis to Nasdaq-100 tickers only")
@@ -183,7 +183,7 @@ if args.use_fcf_yield:
 # -----------------------------------------------------------------------------
 def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
     """
-    Perform both OLS and robust regression with comprehensive metrics
+    Perform both LS and robust regression with comprehensive metrics
     """
     # Filter out infinite and NaN values first
     finite_mask = np.isfinite(x) & np.isfinite(y)
@@ -206,7 +206,7 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
     # Reshape for sklearn
     X = x_clipped.reshape(-1, 1)
     
-    # OLS Regression (manual calculation for consistency with original)
+    # LS Regression (manual calculation for consistency with original)
     x_mean, y_mean = x_clipped.mean(), y_clipped.mean()
     Sxx = np.sum((x_clipped - x_mean) ** 2)
     Sxy = np.sum((x_clipped - x_mean) * (y_clipped - y_mean))
@@ -214,28 +214,29 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
     if Sxx == 0:
         return None
         
-    ols_slope = Sxy / Sxx
-    ols_intercept = y_mean - ols_slope * x_mean
+    ls_slope = Sxy / Sxx
+    ls_intercept = y_mean - ls_slope * x_mean
     
     # Predictions and residuals
-    y_pred_ols = ols_intercept + ols_slope * x_clipped
-    residuals_ols = y_clipped - y_pred_ols
+    y_pred_ls = ls_intercept + ls_slope * x_clipped
+    residuals_ls = y_clipped - y_pred_ls
     
     # RSS (Residual Sum of Squares)
-    rss_ols = np.sum(residuals_ols ** 2)
+    rss_ls = np.sum(residuals_ls ** 2)
     
     # R^2 calculation
     tss = np.sum((y_clipped - y_mean) ** 2)  # Total Sum of Squares
-    r2_ols = 1 - (rss_ols / tss) if tss > 0 else 0
+    r2_ls = 1 - (rss_ls / tss) if tss > 0 else 0
     
     # Standard error and statistical tests
-    residual_var = rss_ols / (n - 2)
+    residual_var = rss_ls / (n - 2)
     SE = np.sqrt(residual_var / Sxx)
-    t_stat = ols_slope / SE if SE > 0 else 0
+    t_stat = ls_slope / SE if SE > 0 else 0
     p_value = 2 * stats.t.sf(abs(t_stat), df=n - 2) if SE > 0 else 1
-    tcrit = stats.t.ppf(0.975, df=n - 2)
-    ci = (ols_slope - tcrit * SE, ols_slope + tcrit * SE) if SE > 0 else (ols_slope, ols_slope)
-    reject_H0 = abs(t_stat) > tcrit if SE > 0 else False
+    alpha = 0.05
+    t_crit = stats.t.ppf(1 - alpha /2, df=n - 2)
+    ci = (ls_slope - t_crit * SE, ls_slope + t_crit * SE) if SE > 0 else (ls_slope, ls_slope)
+    reject_H0 = abs(t_stat) > t_crit if SE > 0 else False
     
     # Robust Regression (Huber)
     try:
@@ -248,29 +249,32 @@ def enhanced_regression_analysis(x, y, p_low=0.9, p_high=99.1):
         y_pred_robust = robust_intercept + robust_slope * x_clipped
         residuals_robust = y_clipped - y_pred_robust
         rss_robust = np.sum(residuals_robust ** 2)
-        r2_robust = r2_score(y_clipped, y_pred_robust)
+        
+        # Calculate R² using the mathematical formula: r²xy = 1 - (RSS/TSS)
+        # TSS is already calculated above as: sum((Yi - Ybar)²)
+        r2_robust = 1 - (rss_robust / tss) if tss > 0 else 0
         
     except Exception as e:
         print(f"Robust regression failed: {e}")
-        robust_slope = ols_slope
-        robust_intercept = ols_intercept
-        rss_robust = rss_ols
-        r2_robust = r2_ols
+        robust_slope = ls_slope
+        robust_intercept = ls_intercept
+        rss_robust = rss_ls
+        r2_robust = r2_ls
     pearson_corr, _ = stats.pearsonr(x_clipped, y_clipped)
     
     return {
         "n": n,
-        # OLS results
-        "ols_intercept": ols_intercept,
-        "ols_slope": ols_slope,
-        "ols_SE": SE,
-        "ols_t": t_stat,
-        "ols_p_value": p_value,
-        "ols_CI": ci,
-        "ols_r2": r2_ols,
-        "ols_rss": rss_ols,
-        "ols_t_crit": tcrit,
-        "ols_reject_H0": reject_H0,
+        # LS results
+        "ls_intercept": ls_intercept,
+        "ls_slope": ls_slope,
+        "ls_SE": SE,
+        "ls_t": t_stat,
+        "ls_p_value": p_value,
+        "ls_CI": ci,
+        "ls_r2": r2_ls,
+        "ls_rss": rss_ls,
+        "ls_t_crit": t_crit,
+        "ls_reject_H0": reject_H0,
         # Robust results
         "robust_intercept": robust_intercept,
         "robust_slope": robust_slope,
@@ -292,15 +296,15 @@ def format_results_table(results_dict, horizon_label):
     """Print a nicely formatted table of results"""
     print(f"\n{'='*80}\nREGRESSION RESULTS FOR {horizon_label}\n{'='*80}")
     
-    headers = ["Tier", "N", "OLS Beta1", "OLS R^2", "OLS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
+    headers = ["Tier", "N", "LS Beta1", "LS R^2", "LS RSS", "Robust Beta1", "Robust R^2", "Robust RSS", "p-value", "t-stat", "t-crit", "SE", "Reject H0", "Pearson Corr"]
     print(f"{headers[0]:<12} {headers[1]:<6} {headers[2]:<10} {headers[3]:<8} {headers[4]:<12} {headers[5]:<10} {headers[6]:<8} {headers[7]:<12} {headers[8]:<10} {headers[9]:<8} {headers[10]:<8} {headers[11]:<10} {headers[12]:<10} {headers[13]:<14}")
     print("-" * 150)
 
     for name, r in results_dict.items():
         if r:
-            print(f"{name:<12} {r['n']:<6} {r['ols_slope']:<10.4f} {r['ols_r2']:<8.3f} {r['ols_rss']:<12.1f} "
-                  f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ols_p_value']:<10.3g} "
-                  f"{r['ols_t']:<8.3f} {r['ols_t_crit']:<8.3f} {r['ols_SE']:<10.3g} {str(r['ols_reject_H0']):<10} "
+            print(f"{name:<12} {r['n']:<6} {r['ls_slope']:<10.4f} {r['ls_r2']:<8.3f} {r['ls_rss']:<12.1f} "
+                  f"{r['robust_slope']:<10.4f} {r['robust_r2']:<8.3f} {r['robust_rss']:<12.1f} {r['ls_p_value']:<10.3g} "
+                  f"{r['ls_t']:<8.3f} {r['ls_t_crit']:<8.3f} {r['ls_SE']:<10.3g} {str(r['ls_reject_H0']):<10} "
                   f"{r['correlations']['pearson']:<14.3f}")
 
 
@@ -350,27 +354,34 @@ if args.by_year_windows:
 def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter=None, year_range=None):
     """Create a regression plot with scatter points and fit lines"""
     fig, ax = plt.subplots(figsize=(14, 10))
-    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+    colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
     
     for name, r in results.items():
         if not r:
             continue
-            
-        # Scatter plot - Mid-caps use black color like All Samples for visibility
-        color = "black" if name == "Mid-caps" else colors.get(name, "black")
-        ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
-                  color=color, label=f"{name} data (n={r['n']})")
         
-        # Regression lines
+    for name, r in results.items():
+        if not r:
+            continue
+        
+        # Skip "All Samples" scatter plot unless we're analyzing a specific index
+        if not (name == "All Samples" and not index_filter):
+            # Scatter plot
+            color = colors.get(name)
+            ax.scatter(r["x_clipped"], r["y_clipped"], s=15, alpha=0.4, 
+                      color=color, label=f"{name} data (n={r['n']})")
+        
+        # Always plot regression lines (including for "All Samples")
+        color = colors.get(name)
         fit_x = np.linspace(*r["xlim"], 200)
-        ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-        ax.plot(fit_x, ols_fit_y, color=colors.get(name, "black"), lw=2, 
-                label=f"{name} OLS (R^2={r['ols_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
+        ls_fit_y = r["ls_intercept"] + r["ls_slope"] * fit_x
+        ax.plot(fit_x, ls_fit_y, color=color, lw=2, 
+                label=f"{name} LS (b_LS={r['ls_slope']:.3f}, R^2={r['ls_r2']:.3f}, ρ={r['correlations']['pearson']:.3f})")
         
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-            ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), lw=2, linestyle='--',
-                    label=f"{name} Robust (R^2={r['robust_r2']:.3f})")
+            ax.plot(fit_x, robust_fit_y, color=color, lw=2, linestyle='--',
+                    label=f"{name} Robust (b_LS={r['robust_slope']:.3f}, R^2={r['robust_r2']:.3f})")
 
     # Set labels and title
     title = f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier"
@@ -378,8 +389,8 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
         title += f" ({year_range})"
     if index_filter:
         title += f" ({index_filter} Only)"
-    title += f"\n(OLS {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)"
-    
+    title += f"\n(Least Squares Lines {'and Robust ' if args.show_robust else ''}Regression with R^2 and RSS)"
+
     ax.set_title(title)
     ax.set_xlabel(x_axis_label)
     y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
@@ -392,27 +403,35 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
 
 def plot_single_subplot(ax, results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter):
     """Plot regression data on a single subplot axis"""
-    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+    colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
     
     for name, r in results.items():
         if not r:
             continue
-        # Mid-caps use black color like All Samples for visibility
-        color = "black" if name == "Mid-caps" else colors.get(name, "black")
-        ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, 
-                  color=color, label=f"{name} (n={r['n']})")
         
-        # OLS fit line
+    for name, r in results.items():
+        if not r:
+            continue
+        
+        # Skip "All Samples" scatter plot unless we're analyzing a specific index
+        if not (name == "All Samples" and not index_filter):
+            # Use proper color for each tier
+            color = colors.get(name, "black")
+            ax.scatter(r["x_clipped"], r["y_clipped"], s=10, alpha=0.3, 
+                      color=color, label=f"{name} (n={r['n']})")
+        
+        # Always plot regression lines (including for "All Samples")
+        color = colors.get(name, "black")
         fit_x = np.linspace(*r["xlim"], 100)
-        ols_fit_y = r["ols_intercept"] + r["ols_slope"] * fit_x
-        ax.plot(fit_x, ols_fit_y, color=colors.get(name, "black"), lw=2, 
-               label=f"{name} OLS (R²={r['ols_r2']:.3f})")
+        ls_fit_y = r["ls_intercept"] + r["ls_slope"] * fit_x
+        ax.plot(fit_x, ls_fit_y, color=color, lw=2, 
+               label=f"{name} LS (b_LS={r['ls_slope']:.3f}, R^2={r['ls_r2']:.3f})")
         
         # Robust fit line (if enabled)
         if args.show_robust:
             robust_fit_y = r["robust_intercept"] + r["robust_slope"] * fit_x
-            ax.plot(fit_x, robust_fit_y, color=colors.get(name, "black"), 
-                   lw=2, linestyle='--', label=f"{name} Robust (R²={r['robust_r2']:.3f})")
+            ax.plot(fit_x, robust_fit_y, color=color, 
+                   lw=2, linestyle='--', label=f"{name} Robust (b_LS={r['robust_slope']:.3f}, R^2={r['robust_r2']:.3f})")
 
     ax.set_title(f"{horizon_label} vs {analysis_mode_name}" + 
                 (f" ({index_filter})" if index_filter else ""))
@@ -558,7 +577,7 @@ else:
             all_samples_results[horizon_label] = results["All Samples"]
         all_horizon_results[horizon_label] = results
 
-        # Create enhanced plot with both OLS and robust lines (skip if --no-plots)
+        # Create enhanced plot with both LS and robust lines (skip if --no-plots)
         if not args.no_plots:
             fig = create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_label, args, index_filter)
             
@@ -573,7 +592,7 @@ else:
 # Optional: Combined panel showing all horizons (skip if --no-plots and not in year windows mode)
 if args.single_panel and all_horizon_results and not args.no_plots and not args.by_year_windows:
     fig, axs = plt.subplots(2, 2, figsize=(20, 16), constrained_layout=True)
-    colors = {"All Samples": "black", "Mega-caps": "blue", "Mid-caps": "green", "Micro-caps": "orange"}
+    colors = {"All Samples": "green", "Mega-caps": "blue", "Mid-caps": "black", "Micro-caps": "orange"}
     
     for i, horizon_label in enumerate(HORIZONS):
         row, col = divmod(i, 2)
@@ -598,17 +617,17 @@ if not args.by_year_windows:
     if args.use_log_price_change:
         print("Using log price change on y-axis")
     print(f"{'='*80}")
-    print(f"{'Horizon':<10} {'All Samples OLS R^2':<20} {'All Samples Robust R^2':<22} {'Mega-caps OLS R^2':<18} {'Micro-caps OLS R^2':<18}")
+    print(f"{'Horizon':<10} {'All Samples LS R^2':<20} {'All Samples Robust R^2':<22} {'Mega-caps LS R^2':<18} {'Micro-caps LS R^2':<18}")
     print("-" * 80)
 
     for horizon_label in HORIZONS:
         results = all_horizon_results.get(horizon_label, {})
-        all_ols_r2 = results.get("All Samples", {}).get("ols_r2", 0)
+        all_ls_r2 = results.get("All Samples", {}).get("ls_r2", 0)
         all_robust_r2 = results.get("All Samples", {}).get("robust_r2", 0)
-        mega_ols_r2 = results.get("Mega-caps", {}).get("ols_r2", 0)
-        micro_ols_r2 = results.get("Micro-caps", {}).get("ols_r2", 0)
+        mega_ls_r2 = results.get("Mega-caps", {}).get("ls_r2", 0)
+        micro_ls_r2 = results.get("Micro-caps", {}).get("ls_r2", 0)
         
-        print(f"{horizon_label:<10} {all_ols_r2:<20.4f} {all_robust_r2:<22.4f} {mega_ols_r2:<18.4f} {micro_ols_r2:<18.4f}")
+        print(f"{horizon_label:<10} {all_ls_r2:<20.4f} {all_robust_r2:<22.4f} {mega_ls_r2:<18.4f} {micro_ls_r2:<18.4f}")
 
 print(f"\n{'='*80}")
 print("ANALYSIS COMPLETE")
