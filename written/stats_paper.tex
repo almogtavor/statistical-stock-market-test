@@ -1,3 +1,4 @@
+\pdfoutput=1
 \documentclass[11pt]{article}
 \usepackage{ACL2023}
 \usepackage{times}
@@ -66,13 +67,13 @@ In this study we ask the question: \textbf{Does revenue growth serves as a relia
 
 Revenue reflects a company's overall business performance and is often seen as a leading indicator of future profitability. Unlike metrics such as earnings or free cash flow, it is less affected by accounting adjustments, offering a clearer view of underlying fundamentals.
 
-In our research, we examined the relationship between revenue growth and future stock performance through several complementary analyses. First, we conducted a comparison between revenue growth and free cash flow growth as predictors of stock returns, finding that revenue metrics show a clear advantage. Second, we analyzed differences in predictive power across market capitalization tiers, revealing that mega-cap stocks display much stronger fundamental-price relationships. Third, we investigated how inclusion in major indices (S\&P 500, NASDAQ-100, Dow Jones 30) influences these relationships. Finally, we compiled and made publicly available a comprehensive dataset and the full analysis code, enabling replication and further exploration of our findings.
+In our research, we examined the relationship between revenue growth and future stock performance through several complementary analyses. First, we conducted a comparison between revenue growth and free cash flow growth as predictors of stock returns, finding that revenue metrics show a clear advantage. Second, we analyzed differences in predictive power across market capitalization tiers, revealing that mega-cap stocks display much stronger fundamental-price relationships. Third, we investigated how inclusion in major indices (S\&P 500, NASDAQ-100, Dow Jones 30) influences these relationships. Finally, we compiled and made publicly available a comprehensive dataset \citep{cash-time-machine-dataset} and the full analysis code \citep{cash-time-machine-code}, enabling replication and further exploration of our findings.
 
 Using data from U.S. public companies between 2020 and 2024, we apply least squares regression with resistance standard errors to examine how year-over-year revenue growth relates to future stock price changes over different time horizons. We control for outliers by trimming extreme values and account for differences between companies by grouping them into market capitalization tiers.
 
 \subsection{Data Collection and Preparation}
 
-We built a dataset of quarterly financial statements and daily stock prices for over 5,000 U.S. public companies from 2020 to 2024. We used two primary data sources: SimFin's API for financial data in 2020-2023, and Yahoo Finance for data in 2024-2025 to ensure currency and completeness.
+We built a dataset of quarterly financial statements and daily stock prices for over 5,000 U.S. public companies from 2020 to 2024. We used two primary data sources: SimFin's API \citep{simfin} for financial data in 2020-2023, and Yahoo Finance accessed through the yfinance Python library \citep{yfinance} for data in 2024-2025 to ensure currency and completeness.
 
 For each company, revenue and stock price growth were calculated as the percentage change from the report date to the corresponding date in subsequent periods (6 months, 1 year, 2 years, and 3 years ahead).
 
@@ -311,6 +312,13 @@ Rank & Ticker & Market Cap & Quarter & Revenue Growth & Predicted Gain & t-stat 
 \end{tabular}
 \end{table}
 
+\section{Data and Code Availability}
+
+To facilitate replication and further research, we have open-sourced both our complete dataset and analysis code. The dataset, containing quarterly financial statements and daily stock prices for over 5,000 U.S. public companies from 2020-2025, is available on HuggingFace Datasets \citep{cash-time-machine-dataset}. The full analysis code, including data collection, processing, and statistical modeling scripts, is available on GitHub \citep{cash-time-machine-code}.
+
 \FloatBarrier
+
+\bibliography{anthology,custom}
+\bibliographystyle{acl_natbib}
 
 \end{document}
