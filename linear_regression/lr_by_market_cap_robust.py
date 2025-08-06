@@ -18,6 +18,7 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.metrics import r2_score
 import warnings
 import math
+from codemaya import regression_analysis
 warnings.filterwarnings('ignore')
 
 
@@ -189,6 +190,11 @@ def enhanced_regression_analysis(x, y, p_low=0.2, p_high=99.8):
     Perform both OLS and robust regression with comprehensive metrics
     """
     # Clip outliers
+
+    res = regression_analysis(x,y)
+    print("res")
+    print(res)
+
     x_clip_min, x_clip_max = np.percentile(x, [p_low, p_high])
     y_clip_min, y_clip_max = np.percentile(y, [p_low, p_high])
     mask = (x >= x_clip_min) & (x <= x_clip_max) & (y >= y_clip_min) & (y <= y_clip_max)
@@ -463,7 +469,7 @@ def analyze_horizon_data(df, horizon, analysis_mode_key, index_tickers, index_fi
             
         x_vals = sub_clean[x_pct_col].values
         y_vals = sub_clean[y_pct_col].values
-        
+        print(name)
         if name == "Micro-caps":
             r = enhanced_regression_analysis(x_vals, y_vals,
                                            p_low=P_LOWEST_CAP_CLIPPING_LOW, 
