@@ -27,7 +27,7 @@ from requests.exceptions import HTTPError
 # ──────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 MARKET, START_YEAR = "US", 2000
-DATA_DIR, OUT_CSV  = Path("simfin_data"), Path("fcf_dataset.csv")
+DATA_DIR, OUT_CSV  = Path("simfin_data"), Path("stocks_dataset.csv")
 MAX_RETRY, RETRY_DELAY = 5, 8
 CAPEX_CANDS = [
     "Change in Fixed Assets & Intangibles",

@@ -23,7 +23,7 @@ warnings.filterwarnings('ignore')
 EXTREME_COMPANIES_PERCENTS = 10
 
 # Constants
-CSV = "../fcf_dataset.csv"
+CSV = "../stocks_dataset.csv"
 HORIZONS = ["6M", "1Y", "2Y", "3Y"]
 
 # Index ticker lists

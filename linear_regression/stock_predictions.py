@@ -15,7 +15,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Constants
-CSV = "../fcf_dataset.csv"
+CSV = "../stocks_dataset.csv"
 
 # Index ticker lists
 INDEX_TICKERS = {
