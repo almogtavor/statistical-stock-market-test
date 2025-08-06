@@ -84,9 +84,9 @@ df_full = calculate_non_overlapping_net_income_growth(df_full)
 
 def get_analysis_mode_from_args(args):
     """Determine analysis mode from command line arguments"""
-    modes = [("use_fcf_yield", "fcf_yield"), ("use_net_income_growth", "net_income_growth"), 
-             ("use_volume_growth", "volume_growth"), ("use_revenue_growth", "revenue_growth")]
-    return next((mode for attr, mode in modes if getattr(args, attr)), "fcf_growth")
+    modes = [("use_fcf", "fcf_growth"), ("use_fcf_yield", "fcf_yield"), ("use_net_income_growth", "net_income_growth"), 
+             ("use_volume_growth", "volume_growth")]
+    return next((mode for attr, mode in modes if getattr(args, attr)), "revenue_growth")
 
 def get_column_names(horizon, analysis_mode):
     """Get x and y column names for a given horizon and analysis mode"""
@@ -141,7 +141,7 @@ def get_index_filter_info(args):
 def get_filename_suffix(analysis_mode, index_filter, use_log_price_change=False, log_x_axis=False):
     """Generate filename suffix for saving plots"""
     parts = []
-    if analysis_mode != "fcf_growth":
+    if analysis_mode != "revenue_growth":
         parts.append(analysis_mode)
     if index_filter:
         parts.append(index_filter.lower().replace(' ', '_').replace('-', '_'))
@@ -160,10 +160,10 @@ parser.add_argument("--no-plots", action="store_true", help="Skip all plotting a
 parser.add_argument("--nasdaq100-only", action="store_true", help="Restrict analysis to Nasdaq-100 tickers only")
 parser.add_argument("--dow30-only", action="store_true", help="Restrict analysis to Dow Jones 30 tickers only")
 parser.add_argument("--sp500-only", action="store_true", help="Restrict analysis to S&P 500 tickers only")
-parser.add_argument("--use-fcf-yield", action="store_true", help="Use FCF Yield instead of FCF growth rates")
+parser.add_argument("--use-fcf", action="store_true", help="Use FCF Growth instead of Revenue growth rates")
+parser.add_argument("--use-fcf-yield", action="store_true", help="Use FCF Yield instead of growth rates")
 parser.add_argument("--use-net-income-growth", action="store_true", help="Use Net Income Growth rates")
 parser.add_argument("--use-volume-growth", action="store_true", help="Use Volume Growth rates")
-parser.add_argument("--use-revenue-growth", action="store_true", help="Use Revenue Growth rates")
 parser.add_argument("--by-year-windows", action="store_true", help="Produce separate graphs for each sliding year window")
 parser.add_argument("--window-timeframe", choices=["6M", "1Y", "2Y", "3Y"], default="1Y", help="Time frame for year windows mode")
 parser.add_argument("--use-log-price-change", action="store_true", help="Use log price change on the y-axis")
