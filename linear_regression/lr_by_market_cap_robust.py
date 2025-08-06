@@ -415,12 +415,14 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
             ax.plot(fit_x, robust_fit_y, color=color, lw=2, linestyle='--',
                     label=f"{name} Resistance (b_RL={r['robust_slope']:.3f})")
 
-    # Set labels and title
-    title = f"{horizon_label} Price Change vs {analysis_mode_name} by Market Cap Tier"
+    # Set labels and title    
+    title = f"{horizon_label} Price Change vs {analysis_mode_name}"
     if year_range:
         title += f" ({year_range})"
     if index_filter:
         title += f" ({index_filter} Only)"
+    else:
+        title += " by Market Cap Tier"
 
     ax.set_title(title)
     ax.set_xlabel(x_axis_label)
