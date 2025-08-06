@@ -1,7 +1,7 @@
 # Cash Time Machine
 
 Dataset:
-   - Data is in `fcf_dataset.csv`.
+   - Data is in `stocks_dataset.csv`.
 
 For the paper:
    - You need LaTeX to compile `written/stats_paper.tex`.

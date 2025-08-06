@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-build_fcf_dataset_2025_data.py
+build_stocks_dataset_2025_data.py
 
-Incrementally extend fcf_dataset.csv with fresh Yahoo Finance data
+Incrementally extend stocks_dataset.csv with fresh Yahoo Finance data
 and keep a resumable pointer in yahoo_fill_progress.txt.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ import concurrent.futures
 ###############################################################################
 # -------------------------------- CONFIG ----------------------------------- #
 ###############################################################################
-MASTER_CSV = "fcf_dataset.csv"
+MASTER_CSV = "stocks_dataset.csv"
 PROGRESS_FILE = "yahoo_fill_progress.txt"
 PRICE_LOOKAHEAD_DAYS = 7
 SLEEP_BETWEEN_TICKER = 0.3

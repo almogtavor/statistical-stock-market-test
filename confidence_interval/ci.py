@@ -28,7 +28,7 @@ def main():
     P_LOW = 3
 
     # Load data
-    df = pd.read_csv('../fcf_dataset.csv')
+    df = pd.read_csv('../stocks_dataset.csv')
     
     # Define analysis columns based on mode
     if args.analysis_mode == "revenue_growth":

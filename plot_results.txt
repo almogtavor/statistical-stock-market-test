@@ -62,7 +62,7 @@ Horizon    All Samples LS R^2   All Samples Resistance R^2 Mega-caps LS R^2   Mi
 ================================================================================
 ANALYSIS COMPLETE
 ================================================================================
-PS C:\Users\Anat Tavor\Documents\GitHub\tau\cash-time-machine\linear_regression> python lr_by_market_cap_robust.py --use-revenue-growth --sp500-only --single-panel
+python lr_by_market_cap_robust.py --use-revenue-growth --sp500-only --single-panel
 Filtering to S&P 500 tickers only (8188 observations)
 All Samples
 
@@ -113,7 +113,7 @@ Horizon    All Samples LS R^2   All Samples Resistance R^2 Mega-caps LS R^2   Mi
 ================================================================================
 ANALYSIS COMPLETE
 ================================================================================
-PS C:\Users\Anat Tavor\Documents\GitHub\tau\cash-time-machine\linear_regression> python lr_by_market_cap_robust.py --use-revenue-growth --sp500-only --single-panel
+python lr_by_market_cap_robust.py --use-revenue-growth --sp500-only --single-panel
 Filtering to S&P 500 tickers only (8188 observations)
 All Samples
 
