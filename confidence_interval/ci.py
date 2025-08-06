@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
+from scipy import stats
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import argparse
@@ -32,16 +32,16 @@ def main():
     
     # Define analysis columns based on mode
     if args.analysis_mode == "revenue_growth":
-        x_cols = ['1Y_Revenue_growth', '2Y_Revenue_growth']
+        x_cols = ['1Y_Revenue_growth', '2Y_Revenue_growth', '3Y_Revenue_growth']
         analysis_name = "Revenue Growth"
         x_label = "Revenue Growth (%)"
     else:  # fcf_growth
-        x_cols = ['1Y_FCFps_growth', '2Y_FCFps_growth'] 
+        x_cols = ['1Y_FCFps_growth', '2Y_FCFps_growth', '3Y_FCFps_growth']
         analysis_name = "FCF Growth"
         x_label = "FCFps Growth (%)"
     
     # Select relevant columns
-    base_cols = ['Ticker', 'Market_Cap', '1Y_Price_growth', '2Y_Price_growth']
+    base_cols = ['Ticker', 'Market_Cap', '1Y_Price_growth', '2Y_Price_growth', '3Y_Price_growth']
     df = df[base_cols + x_cols]
     df = df.replace([np.inf, -np.inf], np.nan).dropna()
 
@@ -60,7 +60,8 @@ def main():
     # Add forward-looking price columns
     df['1Y_Price_growth_lead'] = df.groupby('Ticker')['1Y_Price_growth'].shift(-1)
     df['2Y_Price_growth_lead'] = df.groupby('Ticker')['2Y_Price_growth'].shift(-2)
-    df = df.dropna(subset=['1Y_Price_growth_lead', '2Y_Price_growth_lead'])
+    df['3Y_Price_growth_lead'] = df.groupby('Ticker')['3Y_Price_growth'].shift(-3)
+    df = df.dropna(subset=['1Y_Price_growth_lead', '2Y_Price_growth_lead', '3Y_Price_growth_lead'])
 
     print(f"Analysis: {analysis_name} vs Price Change")
     if index_filter:
@@ -85,9 +86,9 @@ def main():
 
     colors = {
         "Micro": "orange",
-        "Mid": "green", 
+        "Mid": "black", 
         "Mega": "blue",
-        "All": "black"
+        "All": "green"
     }
 
     def collect_ci_slopes(df_dict, x_col, y_col, label_suffix):
@@ -107,18 +108,59 @@ def main():
             if len(subdf) < 10:
                 print(f"Skipping {name} {label_suffix}: insufficient data after outlier removal ({len(subdf)} observations)")
                 continue
+            
+            # Manual linear regression calculation
+            x = subdf[x_col].values
+            y = subdf[y_col].values
+            n = len(x)
+            
+            # Calculate means
+            x_mean = np.mean(x)
+            y_mean = np.mean(y)
+            
+            # Calculate slope (β₁) and intercept (β₀)
+            # β₁ = Σ(x_i - x̄)(y_i - ȳ) / Σ(x_i - x̄)²
+            numerator = np.sum((x - x_mean) * (y - y_mean))
+            denominator = np.sum((x - x_mean) ** 2)
+            
+            if denominator == 0:
+                print(f"Skipping {name} {label_suffix}: zero variance in x")
+                continue
                 
-            X = sm.add_constant(subdf[x_col])
-            y = subdf[y_col]
-            model = sm.OLS(y, X).fit()
-            slope = model.params[x_col]
-            ci = model.conf_int().loc[x_col].values
-            print(f"{name} {label_suffix}: Slope = {slope:.4f}, CI = ({ci[0]:.4f}, {ci[1]:.4f}), N = {len(subdf)}")
+            slope = numerator / denominator
+            intercept = y_mean - slope * x_mean
+            
+            # Calculate residuals and standard error
+            y_pred = intercept + slope * x
+            residuals = y - y_pred
+            
+            # Residual sum of squares (RSS)
+            rss = np.sum(residuals ** 2)
+            
+            # Degrees of freedom
+            df = n - 2
+            
+            # Mean squared error (MSE)
+            mse = rss / df
+            
+            # Standard error of the slope
+            # SE(β₁) = √(MSE / Σ(x_i - x̄)²)
+            se_slope = np.sqrt(mse / denominator)
+            
+            # 95% confidence interval using t-distribution
+            # CI = β₁ ± t_{1-α/2, df} * SE(β₁)
+            alpha = 0.05  # for 95% confidence interval
+            t_critical = stats.t.ppf(1 - alpha/2, df)
+            
+            ci_low = slope - t_critical * se_slope
+            ci_high = slope + t_critical * se_slope
+            
+            print(f"{name} {label_suffix}: Slope = {slope:.4f}, CI = ({ci_low:.4f}, {ci_high:.4f}), N = {len(subdf)}")
             rows.append({
                 "Group": f"{name} {label_suffix}",
                 "Slope": slope,
-                "CI_Low": ci[0],
-                "CI_High": ci[1],
+                "CI_Low": ci_low,
+                "CI_High": ci_high,
                 "Color": colors[name],
                 "N": len(subdf)
             })
@@ -127,7 +169,8 @@ def main():
     # Collect confidence intervals for both horizons
     ci_df_1y = collect_ci_slopes(tiers, x_cols[0], '1Y_Price_growth_lead', '1Y')
     ci_df_2y = collect_ci_slopes(tiers, x_cols[1], '2Y_Price_growth_lead', '2Y')
-    ci_df = pd.concat([ci_df_1y, ci_df_2y]).reset_index(drop=True)
+    ci_df_3y = collect_ci_slopes(tiers, x_cols[2], '3Y_Price_growth_lead', '3Y')
+    ci_df = pd.concat([ci_df_1y, ci_df_2y, ci_df_3y]).reset_index(drop=True)
 
     if len(ci_df) == 0:
         print("No valid data for confidence interval analysis")
@@ -142,10 +185,10 @@ def main():
 
     plt.yticks(range(len(ci_df)), ci_df['Group'])
     plt.axvline(x=0, color='black', linestyle='--', linewidth=1, alpha=0.7)
-    plt.xlabel(f"OLS Slope ({x_label} vs. Price Growth)", fontsize=12)
+    plt.xlabel(f"LS Slope ({x_label} vs. Price Growth)", fontsize=12)
     
     # Create title with filter information
-    title = f"Slope & Confidence Intervals by Market Cap Tier ({analysis_name})"
+    title = f"Slope & Confidence Intervals by Market Cap ({analysis_name})"
     if index_filter:
         title += f" - {index_filter} Only"
     plt.title(title, fontsize=14, fontweight='bold')
@@ -163,8 +206,16 @@ def main():
     plt.legend(handles=legend_elements, title="Market Cap Tier", loc="lower right")
     
     # Add sample size information
-    plt.figtext(0.02, 0.02, f"Note: Error bars show 95% confidence intervals. Sample sizes vary by tier.", 
+    plt.figtext(0.02, 0.02, f"Note: Error bars = slope ± t * SE (95% CI)", 
                 fontsize=10, style='italic')
+    
+    # Save plot
+    filename = f"confidence_intervals_{args.analysis_mode.lower()}"
+    if index_filter:
+        filename += f"_{index_filter.lower().replace(' ', '_').replace('&', 'and')}"
+    filename += ".png"
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    print(f"Saved plot: {filename}")
     
     plt.show()
 
