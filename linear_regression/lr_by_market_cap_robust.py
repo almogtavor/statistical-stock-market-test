@@ -428,7 +428,7 @@ def create_regression_plot(results, horizon_label, analysis_mode_name, x_axis_la
     ax.set_xlabel(x_axis_label)
     y_label = f"{horizon_label} Forward Log Price Change" if args.use_log_price_change else f"{horizon_label} Forward Price Change (%)"
     ax.set_ylabel(y_label)
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.legend(loc="upper left")
     ax.grid(alpha=0.3)
     plt.tight_layout()
     

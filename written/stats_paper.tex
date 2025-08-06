@@ -30,6 +30,8 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{placeins}
+\usepackage{graphicx}
+\usepackage{stfloats}      % or: \usepackage{dblfloatfix}
 
 % If the title and author information does not fit in the area allocated, uncomment the following
 %
@@ -196,6 +198,13 @@ For the 1-year horizon, mega-caps achieve $R^2 = 0.102$ with a Pearson correlati
 
 In contrast, micro-caps and mid-caps show weaker but still statistically significant relationships. Mid-caps consistently exhibit $R^2$ values around 0.008-0.011 across horizons, while micro-caps show declining explanatory power from 0.025 (1Y) to 0.005 (3Y).
 
+\begin{figure*}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{images/all_horizons_all_stocks_single_plot.png}
+\caption{Revenue growth vs. price changes across time horizons (6M, 1Y, 2Y, 3Y) and market cap tiers. Mega-caps show the strongest relationships, followed by micro-caps and mid-caps.}
+\label{fig:revenue-by-cap}
+\end{figure*}
+
 \subsection{Index-Specific Analysis}
 
 Analysis of major market indices reveals enhanced predictive power within these curated sets of high-quality companies. Table~\ref{tab:index-results} presents results for S\&P 500 constituents, which demonstrate substantially stronger revenue-price relationships than the broader market.
@@ -220,6 +229,27 @@ Horizon & Mega-caps $R^2$ & Mega-caps $\rho$ & S\&P $R^2$ & S\&P $\rho$ \\
 \FloatBarrier
 
 Notably, S\&P 500 mega-caps at the 3-year horizon achieve $R^2 = 0.351$, indicating that revenue growth explains over one-third of future price variation—a remarkably strong relationship in equity markets.
+
+\begin{figure*}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{images/1_year_sp500_plot.png}
+\caption{S\&P 500 constituents: 1-year price change vs. revenue growth. Index constituents show stronger fundamental-price relationships than the broader market.}
+\label{fig:sp500}
+\end{figure*}
+
+\begin{figure*}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{images/1_year_nasdaq100_plot.png}
+\caption{NASDAQ-100 constituents: 1-year price change vs. revenue growth. Technology-focused index shows robust revenue-price relationships.}
+\label{fig:nasdaq100}
+\end{figure*}
+
+\begin{figure*}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{images/1_year_dow30_plot.png}
+\caption{Dow Jones 30 constituents: 1-year price change vs. revenue growth. Blue-chip stocks demonstrate strong fundamental-based pricing relationships.}
+\label{fig:dow30}
+\end{figure*}
 
 \subsection{Statistical Significance and Hypothesis Testing}
 
@@ -246,6 +276,13 @@ Micro-caps & $< 10^{-20}$ & $< 10^{-8}$ & $< 10^{-3}$ \\
 \subsection{Confidence Interval Analysis}
 
 Figure~\ref{fig:confidence-intervals} presents 95\% confidence intervals for the slope coefficients across market cap tiers and time horizons. All confidence intervals exclude zero, confirming statistical significance. The confidence intervals are notably tighter for mega-caps, reflecting both larger effect sizes and more stable relationships within this tier.
+
+\begin{figure*}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{images/all_horizons_confidence_intervals.png}
+\caption{95\% confidence intervals for slope coefficients across market cap tiers and time horizons. Error bars show standard errors for least squares estimates.}
+\label{fig:confidence-intervals}
+\end{figure*}
 
 The slope coefficients indicate that a 1 percentage point increase in revenue growth is associated with approximately 0.18 percentage point increase in 1-year forward price growth for mega-caps, compared to 0.14 percentage points for micro-caps and 0.16 percentage points for mid-caps.
 
