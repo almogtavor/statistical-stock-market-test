@@ -206,3 +206,4 @@ refresh.log
 stocks_dataset.original.csv
 stocks_dataset.refreshed.csv
 .claude/
+recs_enrich_cache.csv

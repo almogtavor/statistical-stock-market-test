@@ -41,6 +41,16 @@
   td.num{text-align:right;font-variant-numeric:tabular-nums}
   .tk{font-weight:700}
   .pos{color:var(--green)} .neg{color:var(--red)} .g{color:var(--gold)}
+  .recs{display:flex;flex-direction:column}
+  .rec{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .rec:last-child{border-bottom:0}
+  .rec .l{flex:1;min-width:0}
+  .rec .name{display:block;color:var(--muted);font-size:11.5px;margin-top:1px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rec .sub{display:block;color:var(--muted);font-size:11px;margin-top:3px;font-variant-numeric:tabular-nums}
+  .rec .sub b{color:#c7ccd4;font-weight:600}
+  .rec .grow{color:var(--gold);font-weight:700;font-size:14px;white-space:nowrap;
+    font-variant-numeric:tabular-nums;padding-top:1px}
   .stat{display:flex;justify-content:space-between;align-items:baseline;
     padding:8px 0;border-bottom:1px solid var(--line)}
   .stat:last-child{border-bottom:0}
@@ -74,13 +84,13 @@
   <aside>
     <div class="panel card">
       <h2>Most recommended S&amp;P 500 stocks</h2>
-      <p class="hint">Top names ranked by trailing revenue growth. Pick a horizon:</p>
+      <p class="hint">Top names ranked by trailing revenue growth, with current market cap and price/sales. Pick a horizon:</p>
       <div class="tabs" id="tabs">
         <button data-h="6M">6M growth</button>
         <button data-h="1Y" class="active">1Y growth</button>
         <button data-h="2Y">2Y growth</button>
       </div>
-      <table id="recs"><thead><tr><th>Ticker</th><th class="num">Rev growth</th></tr></thead><tbody></tbody></table>
+      <div id="recs" class="recs"></div>
     </div>
 
     <div class="panel card">
@@ -135,10 +145,16 @@ function drawChart(){
 
 function renderSidebar(){
   // current picks
-  const tb=document.querySelector('#recs tbody'); tb.innerHTML='';
+  const rc=document.getElementById('recs'); rc.innerHTML='';
   DATA.recs[H].forEach(p=>{
-    tb.insertAdjacentHTML('beforeend',
-      `<tr><td class="tk">${p.t}</td><td class="num g">${PCT(p.g,0)}</td></tr>`);
+    const mc = p.mcap!=null ? '$'+fmtMc(p.mcap) : '-';
+    const ps = p.ps!=null ? p.ps : '-';
+    rc.insertAdjacentHTML('beforeend',
+      `<div class="rec"><div class="l">`+
+        `<span class="tk">${p.t}</span>`+
+        `<span class="name">${p.name||''}</span>`+
+        `<span class="sub">Mkt cap <b>${mc}</b> &middot; P/S <b>${ps}</b></span>`+
+      `</div><div class="grow">${PCT(p.g,0)}</div></div>`);
   });
   // backtest
   const b=DATA.backtest[H];
