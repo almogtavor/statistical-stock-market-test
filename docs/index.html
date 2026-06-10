@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Growth vs Returns - Statistical Stock Market Test</title>
+<meta name="description" content="Interactive P/E (NTM) vs revenue-growth map of the top US companies, plus backtested S&P 500 revenue-growth recommendations.">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root{
+    --bg:#16161a; --panel:#1f1f25; --panel2:#26262e; --line:#33343a;
+    --text:#e8e8e8; --muted:#9aa0aa; --blue:#4fa3ff; --green:#3ddc84;
+    --gold:#ffd24a; --red:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--green);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{padding:22px 28px 8px}
+  h1{margin:0;font-size:22px;font-weight:700}
+  .sub{color:var(--muted);font-size:13.5px;margin-top:6px;max-width:760px;line-height:1.5}
+  .meta{color:var(--muted);font-size:12px;margin-top:8px}
+  .meta b{color:var(--text)}
+  main{display:grid;grid-template-columns:1fr 360px;gap:18px;padding:14px 28px 28px}
+  @media (max-width:900px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .chart-title{padding:14px 16px 0;font-size:15px;font-weight:600;color:#e8e8e8}
+  #chart{width:100%;height:600px}
+  aside{display:flex;flex-direction:column;gap:18px}
+  .card{padding:16px 16px 18px}
+  .card h2{margin:0 0 4px;font-size:15px}
+  .card .hint{color:var(--muted);font-size:11.5px;margin:0 0 12px;line-height:1.45}
+  .tabs{display:flex;gap:6px;margin-bottom:14px}
+  .tabs button{flex:1;background:var(--panel2);color:var(--muted);border:1px solid var(--line);
+    border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  .tabs button.active{background:var(--green);color:#0a0a0a;border-color:var(--green)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tk{font-weight:700}
+  .pos{color:var(--green)} .neg{color:var(--red)} .g{color:var(--gold)}
+  .stat{display:flex;justify-content:space-between;align-items:baseline;
+    padding:8px 0;border-bottom:1px solid var(--line)}
+  .stat:last-child{border-bottom:0}
+  .stat .k{color:var(--muted);font-size:12.5px}
+  .stat .v{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+  .ex{background:var(--panel2);border-radius:9px;padding:11px 12px;margin-top:12px;font-size:12.5px}
+  .ex .lbl{color:var(--muted)}
+  .ex .row{display:flex;justify-content:space-between;padding:3px 0}
+  footer{color:var(--muted);font-size:12px;padding:0 28px 30px;max-width:980px;line-height:1.55}
+  .badge{float:right;color:var(--green);font-weight:700;font-size:12px;letter-spacing:.05em}
+</style>
+</head>
+<body>
+<header>
+  <span class="badge">VJN AI</span>
+  <h1>Revenue Growth vs Returns</h1>
+  <div class="sub">An interactive map of the largest US companies by forward P/E (NTM) and 1-year
+    revenue growth, paired with a backtest of the project's core thesis: <i>does ranking S&amp;P 500
+    stocks by revenue growth predict future returns?</i></div>
+  <div class="meta">Data as of <b id="asof">-</b> &middot; built from the
+    <a href="https://huggingface.co/datasets/almogtavor/open-stock-reports-dataset" target="_blank">open-stock-reports dataset</a>
+    &middot; <a href="https://github.com/almogtavor/statistical-stock-market-test" target="_blank">repo &amp; paper</a></div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="chart-title" id="chart-title">P/E Ratio (NTM) vs Revenue (1Y Growth)</div>
+    <div id="chart"></div>
+  </section>
+
+  <aside>
+    <div class="panel card">
+      <h2>Most recommended S&amp;P 500 stocks</h2>
+      <p class="hint">Top names ranked by trailing revenue growth. Pick a horizon:</p>
+      <div class="tabs" id="tabs">
+        <button data-h="6M">6M growth</button>
+        <button data-h="1Y" class="active">1Y growth</button>
+        <button data-h="2Y">2Y growth</button>
+      </div>
+      <table id="recs"><thead><tr><th>Ticker</th><th class="num">Rev growth</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="panel card">
+      <h2>Did the signal work? <span style="color:var(--muted);font-weight:400">(backtest)</span></h2>
+      <p class="hint">Across every reporting date, the top-<span id="pickn">3</span> S&amp;P names by this
+        signal vs the S&amp;P average, measured over the <span id="hzn">1Y</span> that followed.</p>
+      <div class="stat"><span class="k">Top-3 basket, avg forward return</span><span class="v pos" id="bt-top">-</span></div>
+      <div class="stat"><span class="k">S&amp;P average, same window</span><span class="v" id="bt-bench">-</span></div>
+      <div class="stat"><span class="k">Excess return (edge)</span><span class="v g" id="bt-excess">-</span></div>
+      <div class="stat"><span class="k">Win rate &middot; periods</span><span class="v" id="bt-win">-</span></div>
+      <div class="ex" id="bt-ex"></div>
+    </div>
+  </aside>
+</main>
+
+<footer id="note"></footer>
+
+<script>
+const PCT = (x,d=0)=> (x>=0?'+':'')+(x*100).toFixed(d)+'%';
+const fmtMc = v => v>=1000 ? (v/1000).toFixed(2)+'T' : Math.round(v)+'B';
+let DATA=null, H='1Y';
+
+function drawChart(){
+  const s=DATA.scatter;
+  const sizes=s.map(p=>{const r=Math.sqrt(p.mc/Math.max(...s.map(q=>q.mc)));return 6+34*r;});
+  const trace={
+    x:s.map(p=>Math.min(p.pe,200)), y:s.map(p=>Math.max(-0.5,Math.min(3,p.g))),
+    text:s.map(p=>`<b>${p.t}</b><br>P/E (NTM): ${p.pe}<br>1Y rev growth: ${PCT(p.g,0)}<br>Market cap: $${fmtMc(p.mc)}`),
+    mode:'markers', type:'scattergl', hoverinfo:'text',
+    marker:{size:sizes, color:'#4fa3ff', opacity:0.55, line:{width:0}}
+  };
+  // gold labels for >90% growers
+  const hot=s.filter(p=>p.g>0.9);
+  const ann=hot.map(p=>({x:Math.min(p.pe,200), y:Math.min(3,p.g), text:p.t, showarrow:false,
+    font:{color:'#ffd24a',size:10}, yshift:9, bgcolor:'rgba(0,0,0,0)'}));
+  // megacap logos
+  const imgs=DATA.logos.map(l=>({source:l.img, xref:'x', yref:'y',
+    x:Math.min(l.pe,200), y:Math.min(3,l.g), sizex:11, sizey:0.17,
+    xanchor:'center', yanchor:'middle', layer:'above'}));
+  const layout={
+    paper_bgcolor:'#1f1f25', plot_bgcolor:'#1f1f25',
+    margin:{l:58,r:18,t:14,b:48},
+    xaxis:{title:'P/E Ratio (NTM)', range:[0,200], gridcolor:'#2c2d33', zeroline:false,
+      color:'#bdbdbd', titlefont:{color:'#cfcfcf'}},
+    yaxis:{title:'Revenue (1Y Growth)', range:[-0.5,3], gridcolor:'#2c2d33', zeroline:false,
+      tickformat:'.0%', color:'#bdbdbd', titlefont:{color:'#cfcfcf'}},
+    annotations:ann, images:imgs, showlegend:false
+  };
+  Plotly.newPlot('chart', [trace], layout, {responsive:true, displayModeBar:true,
+    modeBarButtonsToRemove:['lasso2d','select2d'], displaylogo:false});
+}
+
+function renderSidebar(){
+  // current picks
+  const tb=document.querySelector('#recs tbody'); tb.innerHTML='';
+  DATA.recs[H].forEach(p=>{
+    tb.insertAdjacentHTML('beforeend',
+      `<tr><td class="tk">${p.t}</td><td class="num g">${PCT(p.g,0)}</td></tr>`);
+  });
+  // backtest
+  const b=DATA.backtest[H];
+  document.getElementById('hzn').textContent=H;
+  document.getElementById('pickn').textContent=DATA.pickN;
+  document.getElementById('bt-top').textContent=PCT(b.top,1);
+  document.getElementById('bt-bench').textContent=PCT(b.bench,1);
+  document.getElementById('bt-excess').textContent=(b.excess>=0?'+':'')+(b.excess*100).toFixed(1)+'pp';
+  document.getElementById('bt-win').textContent=Math.round(b.winrate*100)+'%  ('+b.n+')';
+  const ex=b.example;
+  let rows=ex.picks.map(p=>`<div class="row"><span class="tk">${p.t}</span>`+
+    `<span><span class="lbl">rev ${PCT(p.sig,0)}</span> &rarr; `+
+    `<span class="${p.ret>=0?'pos':'neg'}">${PCT(p.ret,0)}</span></span></div>`).join('');
+  document.getElementById('bt-ex').innerHTML=
+    `<div class="lbl" style="margin-bottom:6px">Picked ${ex.date}, realized over the next ${H}:</div>`+
+    rows+`<div class="row" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">`+
+    `<span class="lbl">S&amp;P average</span><span>${PCT(ex.bench,0)}</span></div>`;
+}
+
+function setHorizon(h){
+  H=h;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.h===h));
+  renderSidebar();
+}
+
+fetch('site_data.json').then(r=>r.json()).then(d=>{
+  DATA=d;
+  document.getElementById('asof').textContent=d.asOf;
+  document.getElementById('chart-title').textContent=
+    `P/E Ratio (NTM) vs Revenue (1Y Growth) - Top ${d.topN} by Market Cap`;
+  document.getElementById('note').innerHTML=
+    `<b>Method.</b> Signal = trailing revenue growth (6M=2 quarters, 1Y=4, 2Y=8) from the dataset. `+
+    `Each reporting date, S&amp;P 500 names are ranked by the signal; the top ${d.pickN} form an equal-weight `+
+    `basket whose realized forward price return over the matching horizon is compared to the S&amp;P average `+
+    `that date. Revenue-growth artifacts above ${d.capPct}% (from near-zero/negative bases) are excluded. `+
+    `Backtest is illustrative, not investment advice; survivorship and point-in-time index membership are not fully controlled.`;
+  document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setHorizon(b.dataset.h));
+  drawChart(); renderSidebar();
+});
+</script>
+</body>
+</html>
