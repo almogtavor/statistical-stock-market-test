@@ -74,30 +74,36 @@ def fetch_forward_pe(tickers: list[str]) -> pd.DataFrame:
     cache = {}
     if os.path.exists(PE_CACHE):
         c = pd.read_csv(PE_CACHE)
-        cache = {r.Ticker: (r.forwardPE, r.liveMarketCap) for r in c.itertuples()}
+        # back-compat: older caches lack trailingPE
+        tcol = c["trailingPE"] if "trailingPE" in c.columns else [np.nan] * len(c)
+        cache = {r.Ticker: (r.forwardPE, t, r.liveMarketCap)
+                 for r, t in zip(c.itertuples(), tcol)}
 
-    rows = []
-    todo = [t for t in tickers if t not in cache]
-    print(f"forward P/E: {len(cache)} cached, {len(todo)} to fetch")
+    def dump():
+        pd.DataFrame([{"Ticker": k, "forwardPE": v[0], "trailingPE": v[1],
+                       "liveMarketCap": v[2]} for k, v in cache.items()]).to_csv(
+            PE_CACHE, index=False)
+
+    # re-fetch entries still missing a trailing P/E (and brand-new tickers)
+    todo = [t for t in tickers if t not in cache or pd.isna(cache[t][1])]
+    print(f"P/E fetch: {len(cache)} cached, {len(todo)} to (re)fetch")
     for i, t in enumerate(todo, 1):
-        fpe, mc = np.nan, np.nan
+        fpe, tpe, mc = np.nan, np.nan, np.nan
         try:
             info = yf.Ticker(t).get_info()
             fpe = info.get("forwardPE", np.nan)
+            tpe = info.get("trailingPE", np.nan)
             mc = info.get("marketCap", np.nan)
         except Exception as ex:
             print(f"  {t}: {ex}")
-        cache[t] = (fpe, mc)
+        cache[t] = (fpe, tpe, mc)
         if i % 50 == 0:
             print(f"  [{i}/{len(todo)}] fetched")
-            pd.DataFrame([{"Ticker": k, "forwardPE": v[0], "liveMarketCap": v[1]}
-                          for k, v in cache.items()]).to_csv(PE_CACHE, index=False)
+            dump()
         time.sleep(0.2)
 
-    out = pd.DataFrame([{"Ticker": k, "forwardPE": v[0], "liveMarketCap": v[1]}
-                        for k, v in cache.items()])
-    out.to_csv(PE_CACHE, index=False)
-    return out
+    dump()
+    return pd.read_csv(PE_CACHE)
 
 
 def get_logo(ticker: str):

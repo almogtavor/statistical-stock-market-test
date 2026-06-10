@@ -25,7 +25,13 @@
   main{display:grid;grid-template-columns:1fr 360px;gap:18px;padding:14px 28px 28px}
   @media (max-width:900px){main{grid-template-columns:1fr}}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}
-  .chart-title{padding:14px 16px 0;font-size:15px;font-weight:600;color:#e8e8e8}
+  .chart-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:13px 16px 0;flex-wrap:wrap}
+  .chart-title{font-size:15px;font-weight:600;color:#e8e8e8}
+  .petabs{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+  .petabs button{background:var(--panel2);color:var(--muted);border:0;padding:6px 12px;
+    font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+  .petabs button.active{background:var(--green);color:#0a0a0a}
   #chart{width:100%;height:600px}
   aside{display:flex;flex-direction:column;gap:18px}
   .card{padding:16px 16px 18px}
@@ -77,7 +83,13 @@
 
 <main>
   <section class="panel">
-    <div class="chart-title" id="chart-title">P/E Ratio (NTM) vs Revenue (1Y Growth)</div>
+    <div class="chart-head">
+      <div class="chart-title" id="chart-title">P/E Ratio (NTM) vs Revenue (1Y Growth)</div>
+      <div class="petabs" id="petabs">
+        <button data-pe="pe" class="active">Forward (NTM)</button>
+        <button data-pe="tpe">Trailing (TTM)</button>
+      </div>
+    </div>
     <div id="chart"></div>
   </section>
 
@@ -111,36 +123,48 @@
 <script>
 const PCT = (x,d=0)=> (x>=0?'+':'')+(x*100).toFixed(d)+'%';
 const fmtMc = v => v>=1000 ? (v/1000).toFixed(2)+'T' : Math.round(v)+'B';
-let DATA=null, H='1Y';
+let DATA=null, H='1Y', PE='pe';   // PE: 'pe' = forward (NTM), 'tpe' = trailing (TTM)
+const PE_LABEL={pe:'P/E Ratio (NTM)', tpe:'P/E Ratio (TTM)'};
+const PE_MAX ={pe:200, tpe:300};
 
 function drawChart(){
-  const s=DATA.scatter;
-  const sizes=s.map(p=>{const r=Math.sqrt(p.mc/Math.max(...s.map(q=>q.mc)));return 6+34*r;});
+  const xmax=PE_MAX[PE], lab=PE_LABEL[PE];
+  const s=DATA.scatter.filter(p=>p[PE]!=null);     // only points with the chosen metric
+  const maxmc=Math.max(...s.map(q=>q.mc));
+  const sizes=s.map(p=>6+34*Math.sqrt(p.mc/maxmc));
+  const hover=p=>`<b>${p.t}</b><br>P/E (NTM): ${p.pe??'-'}<br>P/E (TTM): ${p.tpe??'-'}`+
+    `<br>1Y rev growth: ${PCT(p.g,0)}<br>Market cap: $${fmtMc(p.mc)}`;
   const trace={
-    x:s.map(p=>Math.min(p.pe,200)), y:s.map(p=>Math.max(-0.5,Math.min(3,p.g))),
-    text:s.map(p=>`<b>${p.t}</b><br>P/E (NTM): ${p.pe}<br>1Y rev growth: ${PCT(p.g,0)}<br>Market cap: $${fmtMc(p.mc)}`),
-    mode:'markers', type:'scattergl', hoverinfo:'text',
+    x:s.map(p=>Math.min(p[PE],xmax)), y:s.map(p=>Math.max(-0.5,Math.min(3,p.g))),
+    text:s.map(hover), mode:'markers', type:'scattergl', hoverinfo:'text',
     marker:{size:sizes, color:'#4fa3ff', opacity:0.55, line:{width:0}}
   };
-  // gold labels for >90% growers
-  const hot=s.filter(p=>p.g>0.9);
-  const ann=hot.map(p=>({x:Math.min(p.pe,200), y:Math.min(3,p.g), text:p.t, showarrow:false,
-    font:{color:'#ffd24a',size:10}, yshift:9, bgcolor:'rgba(0,0,0,0)'}));
-  // megacap logos
-  const imgs=DATA.logos.map(l=>({source:l.img, xref:'x', yref:'y',
-    x:Math.min(l.pe,200), y:Math.min(3,l.g), sizex:11, sizey:0.17,
+  // gold labels for >90% growers (that have the chosen metric)
+  const ann=s.filter(p=>p.g>0.9).map(p=>({x:Math.min(p[PE],xmax), y:Math.min(3,p.g), text:p.t,
+    showarrow:false, font:{color:'#ffd24a',size:10}, yshift:9, bgcolor:'rgba(0,0,0,0)'}));
+  // megacap logos (only those with the chosen metric)
+  const imgs=DATA.logos.filter(l=>l[PE]!=null).map(l=>({source:l.img, xref:'x', yref:'y',
+    x:Math.min(l[PE],xmax), y:Math.min(3,l.g), sizex:xmax*0.055, sizey:0.17,
     xanchor:'center', yanchor:'middle', layer:'above'}));
   const layout={
     paper_bgcolor:'#1f1f25', plot_bgcolor:'#1f1f25',
     margin:{l:58,r:18,t:14,b:48},
-    xaxis:{title:'P/E Ratio (NTM)', range:[0,200], gridcolor:'#2c2d33', zeroline:false,
+    xaxis:{title:lab, range:[0,xmax], gridcolor:'#2c2d33', zeroline:false,
       color:'#bdbdbd', titlefont:{color:'#cfcfcf'}},
     yaxis:{title:'Revenue (1Y Growth)', range:[-0.5,3], gridcolor:'#2c2d33', zeroline:false,
       tickformat:'.0%', color:'#bdbdbd', titlefont:{color:'#cfcfcf'}},
     annotations:ann, images:imgs, showlegend:false
   };
-  Plotly.newPlot('chart', [trace], layout, {responsive:true, displayModeBar:true,
+  Plotly.react('chart', [trace], layout, {responsive:true, displayModeBar:true,
     modeBarButtonsToRemove:['lasso2d','select2d'], displaylogo:false});
+  document.getElementById('chart-title').textContent=
+    `${lab} vs Revenue (1Y Growth) - Top ${DATA.topN} by Market Cap`;
+}
+
+function setPE(mode){
+  PE=mode;
+  document.querySelectorAll('#petabs button').forEach(b=>b.classList.toggle('active',b.dataset.pe===mode));
+  drawChart();
 }
 
 function renderSidebar(){
@@ -183,8 +207,6 @@ function setHorizon(h){
 fetch('site_data.json').then(r=>r.json()).then(d=>{
   DATA=d;
   document.getElementById('asof').textContent=d.asOf;
-  document.getElementById('chart-title').textContent=
-    `P/E Ratio (NTM) vs Revenue (1Y Growth) - Top ${d.topN} by Market Cap`;
   document.getElementById('note').innerHTML=
     `<b>Method.</b> Signal = trailing revenue growth (6M=2 quarters, 1Y=4, 2Y=8) from the dataset. `+
     `Each reporting date, S&amp;P 500 names are ranked by the signal; the top ${d.pickN} form an equal-weight `+
@@ -192,6 +214,7 @@ fetch('site_data.json').then(r=>r.json()).then(d=>{
     `that date. Revenue-growth artifacts above ${d.capPct}% (from near-zero/negative bases) are excluded. `+
     `Backtest is illustrative, not investment advice; survivorship and point-in-time index membership are not fully controlled.`;
   document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setHorizon(b.dataset.h));
+  document.querySelectorAll('#petabs button').forEach(b=>b.onclick=()=>setPE(b.dataset.pe));
   drawChart(); renderSidebar();
 });
 </script>

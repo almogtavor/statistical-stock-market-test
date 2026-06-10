@@ -48,12 +48,19 @@ def scatter_points() -> tuple[list, list]:
     m["mcap"] = pd.to_numeric(m["liveMarketCap"], errors="coerce")
     m = m[(m["mcap"] > 0) & (m["mcap"] <= chart.MCAP_CEILING)]
     m["fwd_pe"] = pd.to_numeric(m["forwardPE"], errors="coerce")
+    m["trail_pe"] = pd.to_numeric(m.get("trailingPE"), errors="coerce")
     m["rev_g"] = pd.to_numeric(m["1Y_Revenue_growth"], errors="coerce")
     uni = m.nlargest(chart.TOP_N, "mcap")
-    plot = uni[(uni["fwd_pe"] > 0) & np.isfinite(uni["fwd_pe"]) & uni["rev_g"].notna()]
+
+    def pe_or_none(x):
+        return round(float(x), 2) if (pd.notna(x) and np.isfinite(x) and x > 0) else None
+
+    ok_pe = lambda s: (s > 0) & np.isfinite(s)
+    plot = uni[uni["rev_g"].notna() & (ok_pe(uni["fwd_pe"]) | ok_pe(uni["trail_pe"]))]
 
     pts = [{"t": r.Ticker,
-            "pe": round(float(r.fwd_pe), 2),
+            "pe": pe_or_none(r.fwd_pe),       # forward (NTM)
+            "tpe": pe_or_none(r.trail_pe),    # trailing (TTM)
             "g": round(float(r.rev_g), 4),
             "mc": round(float(r.mcap) / 1e9, 1)}
            for r in plot.itertuples()]
@@ -66,7 +73,8 @@ def scatter_points() -> tuple[list, list]:
         if os.path.exists(path):
             with open(path, "rb") as fh:
                 b64 = base64.b64encode(fh.read()).decode()
-            logos.append({"t": r.Ticker, "pe": round(float(r.fwd_pe), 2),
+            logos.append({"t": r.Ticker, "pe": pe_or_none(r.fwd_pe),
+                          "tpe": pe_or_none(r.trail_pe),
                           "g": round(float(r.rev_g), 4),
                           "img": f"data:image/png;base64,{b64}"})
     return pts, logos
