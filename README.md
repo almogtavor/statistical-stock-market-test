@@ -33,8 +33,16 @@ Revenue growth shows consistent positive predictive power, with stronger relatio
 <img src="written/images/all_horizons_confidence_intervals.png" width="600">
 </details>
 
+## Interactive site
+
+A GitHub Pages dashboard ([almogtavor.github.io/statistical-stock-market-test](https://almogtavor.github.io/statistical-stock-market-test/)) maps the top 500 U.S. companies by forward P/E (NTM) vs 1-year revenue growth, and backtests the core thesis: ranking S&P 500 stocks by revenue growth and measuring the realized forward return of the top picks vs the S&P average. The top-3 basket beats the index by ~13pp at the 1Y horizon and ~23pp at 2Y.
+
+<img src="top500_pe_ntm_vs_revenue_growth.png" width="850">
+
+Build it with `python build_top_companies_chart.py` (static chart) and `python build_site_data.py` (site data).
+
 ## Resources
 
 - 📄 `written/stats_paper.pdf`
 - Processed dataset: [open-stock-reports-dataset](https://huggingface.co/datasets/almogtavor/open-stock-reports-dataset)
-- Includes quarterly financials + stock prices for 5,000+ U.S. public companies (2020–2025).
+- Includes quarterly financials + stock prices for 5,000+ U.S. public companies (2020–2026).
