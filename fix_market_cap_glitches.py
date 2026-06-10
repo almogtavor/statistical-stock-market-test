@@ -33,6 +33,17 @@ CSV = "stocks_dataset.csv"
 GLITCH_FACTOR = 50.0
 
 
+def write_aligned(df: pd.DataFrame, path: str) -> None:
+    """Write the CSV with Market_Cap and EV as whole integers (fractional cents
+    on a multi-billion figure are noise) and every other float at 3 decimals,
+    so each column has a single consistent format. NaN stays empty."""
+    out = df.copy()
+    for col in ("Market_Cap", "EV"):
+        if col in out.columns:
+            out[col] = out[col].round().astype("Int64")
+    out.to_csv(path, index=False, float_format="%.3f")
+
+
 def fix(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     df = df.sort_values(["Ticker", "Report Date"]).reset_index(drop=True)
     impl = df["Market_Cap"] / df["Price"]
@@ -96,7 +107,7 @@ def main() -> None:
         print("\n[dry-run] not writing.")
         return
     fixed = fixed.sort_values(["Ticker", "Report Date"])
-    fixed.to_csv(args.csv, index=False, float_format="%.3f")
+    write_aligned(fixed, args.csv)
     print(f"\nwrote {args.csv}")
 
 
