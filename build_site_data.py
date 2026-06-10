@@ -72,6 +72,43 @@ def scatter_points() -> tuple[list, list]:
     return pts, logos
 
 
+def enrich_recs(tickers: list[str], ttm_rev: pd.Series) -> dict:
+    """Fetch company name, current market cap and P/S for the recommended tickers.
+
+    P/S uses Yahoo's trailing-12M figure when present, else market cap / TTM
+    revenue from the dataset. Results cached to recs_enrich_cache.csv.
+    """
+    import yfinance as yf
+
+    cache = {}
+    if os.path.exists("recs_enrich_cache.csv"):
+        c = pd.read_csv("recs_enrich_cache.csv").set_index("t")
+        cache = {t: row.dropna().to_dict() for t, row in c.iterrows()}
+
+    out = {}
+    for t in tickers:
+        if t in cache and cache[t].get("name"):
+            out[t] = cache[t]
+            continue
+        name, mcap, ps = t, np.nan, np.nan
+        try:
+            info = yf.Ticker(t).get_info()
+            name = info.get("longName") or info.get("shortName") or t
+            mcap = info.get("marketCap", np.nan)
+            ps = info.get("priceToSalesTrailing12Months", np.nan)
+        except Exception as ex:
+            print(f"  enrich {t}: {ex}")
+        if (ps is None or pd.isna(ps)) and pd.notna(mcap) and ttm_rev.get(t, 0):
+            ps = mcap / ttm_rev[t]
+        rec = {"name": name,
+               "mcap": (None if pd.isna(mcap) else round(float(mcap) / 1e9, 1)),
+               "ps": (None if ps is None or pd.isna(ps) else round(float(ps), 1))}
+        out[t] = rec
+    pd.DataFrame([{"t": k, **v} for k, v in out.items()]).to_csv(
+        "recs_enrich_cache.csv", index=False)
+    return out
+
+
 def recs_and_backtest():
     df = pd.read_csv(CSV, parse_dates=["Report Date"])
     sp = set(json.load(open(SP_LIST)))
@@ -80,15 +117,23 @@ def recs_and_backtest():
     for h, q in HORIZONS.items():
         d[f"fwd_{h}"] = g["Price"].shift(-q) / d["Price"] - 1
 
+    # trailing-twelve-month revenue per ticker (last 4 quarters) for P/S fallback
+    ttm_rev = g["Revenue"].apply(lambda s: s.tail(4).sum())
+
     # current picks (latest row per ticker)
     latest = d.groupby("Ticker").tail(1)
     current = {}
     for h, sig in SIG.items():
         ok = latest[latest[sig].notna() & (latest[sig].abs() <= CAP)]
         top = ok.nlargest(N_CURRENT, sig)
-        current[h] = [{"t": r.Ticker, "g": round(float(r[sig]), 4),
-                       "pe": (None if pd.isna(r.get("forwardPE", np.nan)) else None)}
+        current[h] = [{"t": r.Ticker, "g": round(float(r[sig]), 4)}
                       for _, r in top.iterrows()]
+
+    # enrich every recommended ticker with name, current market cap and P/S
+    enrich = enrich_recs(sorted({p["t"] for hs in current.values() for p in hs}), ttm_rev)
+    for hs in current.values():
+        for p in hs:
+            p.update(enrich.get(p["t"], {}))
 
     # backtest: aggregate edge + most recent measurable example
     backtest = {}
